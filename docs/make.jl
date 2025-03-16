@@ -71,4 +71,5 @@ makedocs(;
 deploydocs(;
     repo="github.com/harmoniqs/PiccoloQuantumObjects.jl.git",
     devbranch="main",
+    versions=[ "dev" => "dev", "stable" => "v^", "v#.#" ]
 )
