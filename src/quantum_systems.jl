@@ -3,6 +3,7 @@ module QuantumSystems
 export AbstractQuantumSystem
 export QuantumSystem
 export OpenQuantumSystem
+export ParameterizedQuantumSystem
 
 export get_drift
 export get_drives
@@ -295,6 +296,62 @@ struct OpenQuantumSystem <: AbstractQuantumSystem
 end
 
 # ****************************************************************************** #
+
+
+
+struct ParameterizedQuantumSystem <: AbstractQuantumSystem
+    H::Function 
+    G::Function
+    Gₐ::Function 
+    ∂G::Function 
+    n_drives::Int 
+    levels::Int 
+    params::Dict{Symbol, Any}
+
+    function ParameterizedQuantumSystem end 
+
+    function ParameterizedQuantumSystem(
+        H_drift::AbstractMatrix{<:Number},
+        H_drives::Vector{<:AbstractMatrix{<:Number}},
+        Hₐ_drives::Vector{<:AbstractMatrix{<:Number}};
+        params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+    )
+        levels = size(H_drift, 1)
+        H_drift = sparse(H_drift)
+        G_drift = sparse(Isomorphisms.G(H_drift))
+
+        n_drives = length(H_drives)
+        H_drives = sparse.(H_drives)
+        G_drives = sparse.(Isomorphisms.G.(H_drives))
+
+        Gₐ_drives = sparse.(Isomorphisms.G.(Hₐ_drives))
+        
+        if n_drives == 0
+            H = a -> H_drift
+            G = a -> G_drift
+            Gₐ = a -> 0
+            ∂G = a -> 0
+        else
+            H = a -> H_drift + sum(a .* H_drives)
+            G = a -> G_drift + sum(a .* G_drives)
+            Gₐ = a -> sum(a .* Gₐ_drives)
+            ∂G = a -> G_drives
+        end
+
+        return new(
+            H,
+            G,
+            Gₐ,
+            ∂G,
+            n_drives,
+            levels,
+            params
+        )
+    end
+end
+
+#***********************************************************************************************#
+
 
 @testitem "System creation" begin
     H_drift = PAULIS[:Z]
