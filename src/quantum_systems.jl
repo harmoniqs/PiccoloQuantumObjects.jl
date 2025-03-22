@@ -348,6 +348,14 @@ struct ParameterizedQuantumSystem <: AbstractQuantumSystem
             params
         )
     end
+
+    
+    function ParameterizedQuantumSystem(H_drives::Vector{<:AbstractMatrix{ℂ}},Hₐ_drives::Vector{<:AbstractMatrix{ℂ}}; kwargs...) where ℂ <: Number
+        @assert !isempty(H_drives) "At least one drive is required"
+        @assert length(Hₐ_drives) == length(H_drives) "Size has to be the same"
+        return ParameterizedQuantumSystem(spzeros(ℂ, size(H_drives[1])), H_drives, Hₐ_drives; kwargs...)
+    end
+
 end
 
 #***********************************************************************************************#
