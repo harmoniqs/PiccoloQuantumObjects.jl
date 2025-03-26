@@ -297,12 +297,10 @@ end
 
 # ****************************************************************************** #
 
-
-
 struct ParameterizedQuantumSystem <: AbstractQuantumSystem
     H::Function 
     G::Function
-    Gₐ::Function 
+    Gₐ::Vector{Function} 
     ∂G::Function 
     n_drives::Int 
     levels::Int 
@@ -310,53 +308,179 @@ struct ParameterizedQuantumSystem <: AbstractQuantumSystem
 
     function ParameterizedQuantumSystem end 
 
-    function ParameterizedQuantumSystem(
-        H_drift::AbstractMatrix{<:Number},
-        H_drives::Vector{<:AbstractMatrix{<:Number}},
-        Hₐ_drives::Vector{<:AbstractMatrix{<:Number}};
-        params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
-    )
-        levels = size(H_drift, 1)
-        H_drift = sparse(H_drift)
-        G_drift = sparse(Isomorphisms.G(H_drift))
-
-        n_drives = length(H_drives)
-        H_drives = sparse.(H_drives)
-        G_drives = sparse.(Isomorphisms.G.(H_drives))
-
-        Gₐ_drives = sparse.(Isomorphisms.G.(Hₐ_drives))
-        
-        if n_drives == 0
-            H = a -> H_drift
-            G = a -> G_drift
-            Gₐ = a -> 0
-            ∂G = a -> 0
-        else
-            H = a -> H_drift + sum(a .* H_drives)
-            G = a -> G_drift + sum(a .* G_drives)
-            Gₐ = a -> sum(a .* Gₐ_drives)
-            ∂G = a -> G_drives
-        end
-
+    function ParameterizedQuantumSystem(base_system::QuantumSystem, sensitivity_systems::Vector{QuantumSystem})
         return new(
-            H,
-            G,
-            Gₐ,
-            ∂G,
-            n_drives,
-            levels,
-            params
+            base_system.H,
+            base_system.G,
+            [sys.G for sys ∈ sensitivity_systems],
+            base_system.∂G,
+            base_system.n_drives,
+            base_system.levels,
+            base_system.params
         )
     end
 
-    
-    function ParameterizedQuantumSystem(H_drives::Vector{<:AbstractMatrix{ℂ}},Hₐ_drives::Vector{<:AbstractMatrix{ℂ}}; kwargs...) where ℂ <: Number
-        @assert !isempty(H_drives) "At least one drive is required"
-        @assert length(Hₐ_drives) == length(H_drives) "Size has to be the same"
-        return ParameterizedQuantumSystem(spzeros(ℂ, size(H_drives[1])), H_drives, Hₐ_drives; kwargs...)
+    function ParameterizedQuantumSystem(system::ParameterizedQuantumSystem, indices::AbstractVector{Int64})
+        return new(
+            system.H,
+            system.G,
+            system.Gₐ[indices],
+            system.∂G,
+            system.n_drives,
+            system.levels,
+            system.params
+        )
     end
 
 end
+
+
+
+
+
+# struct ParameterizedQuantumSystem <: AbstractQuantumSystem
+#     H::Function 
+#     G::Function
+#     Gₐ::Function 
+#     ∂G::Function 
+#     n_drives::Int 
+#     levels::Int 
+#     params::Dict{Symbol, Any}
+
+#     function ParameterizedQuantumSystem end 
+
+#     function ParameterizedQuantumSystem(
+#         H_drift::AbstractMatrix{<:Number},
+#         H_drives::Vector{<:AbstractMatrix{<:Number}},
+#         Hₐ_drives::Vector{<:AbstractMatrix{<:Number}};
+#         params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+#     )
+#         levels = size(H_drift, 1)
+#         H_drift = sparse(H_drift)
+#         G_drift = sparse(Isomorphisms.G(H_drift))
+
+#         n_drives = length(H_drives)
+#         H_drives = sparse.(H_drives)
+#         G_drives = sparse.(Isomorphisms.G.(H_drives))
+
+#         Gₐ_drives = sparse.(Isomorphisms.G.(Hₐ_drives))
+        
+#         if n_drives == 0
+#             H = a -> H_drift
+#             G = a -> G_drift
+#             Gₐ = a -> 0
+#             ∂G = a -> 0
+#         else
+#             H = a -> H_drift + sum(a .* H_drives)
+#             G = a -> G_drift + sum(a .* G_drives)
+#             Gₐ = a -> sum(a .* Gₐ_drives)
+#             ∂G = a -> G_drives
+#         end
+
+#         return new(
+#             H,
+#             G,
+#             Gₐ,
+#             ∂G,
+#             n_drives,
+#             levels,
+#             params
+#         )
+#     end
+
+#     function ParameterizedQuantumSystem(
+#         H_drift::AbstractMatrix{<:Number},
+#         H_drives::Vector{<:AbstractMatrix{<:Number}},
+#         Hₐ_drift::AbstractMatrix{<:Number};
+#         params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+#     )
+#         levels = size(H_drift, 1)
+#         H_drift = sparse(H_drift)
+#         G_drift = sparse(Isomorphisms.G(H_drift))
+
+#         n_drives = length(H_drives)
+#         H_drives = sparse.(H_drives)
+#         G_drives = sparse.(Isomorphisms.G.(H_drives))
+
+#         Gₐ_drift = sparse(Isomorphisms.G(Hₐ_drift))
+        
+#         if n_drives == 0
+#             H = a -> H_drift
+#             G = a -> G_drift
+#             Gₐ = a -> Gₐ_drift
+#             ∂G = a -> 0
+#         else
+#             H = a -> H_drift + sum(a .* H_drives)
+#             G = a -> G_drift + sum(a .* G_drives)
+#             Gₐ = a -> Gₐ_drift
+#             ∂G = a -> G_drives
+#         end
+
+#         return new(
+#             H,
+#             G,
+#             Gₐ,
+#             ∂G,
+#             n_drives,
+#             levels,
+#             params
+#         )
+#     end
+
+#     function ParameterizedQuantumSystem(H_drives::Vector{<:AbstractMatrix{ℂ}},Hₐ_drives::Vector{<:AbstractMatrix{ℂ}}; kwargs...) where ℂ <: Number
+#         @assert !isempty(H_drives) "At least one drive is required"
+#         @assert length(Hₐ_drives) == length(H_drives) "Size has to be the same"
+#         return ParameterizedQuantumSystem(spzeros(ℂ, size(H_drives[1])), H_drives, Hₐ_drives; kwargs...)
+#     end
+    
+#     function ParameterizedQuantumSystem(H_drift::AbstractMatrix{ℂ},Hₐ_drives::Vector{<:AbstractMatrix{ℂ}}; kwargs...) where ℂ <: Number
+#         @assert !isempty(H_drives) "At least one drive is required"
+#         @assert length(Hₐ_drives) == length(H_drives) "Size has to be the same"
+#         return ParameterizedQuantumSystem(H_drift, Matrix{ℂ}[], Hₐ_drives; kwargs...)
+#     end
+
+#     function ParameterizedQuantumSystem(H_drives::Vector{<:AbstractMatrix{ℂ}},Hₐ_drift::AbstractMatrix{ℂ}; kwargs...) where ℂ <: Number
+#         @assert !isempty(H_drives) "At least one drive is required"
+#         @assert length(Hₐ_drives) == length(H_drives) "Size has to be the same"
+#         return ParameterizedQuantumSystem(spzeros(ℂ, size(H_drives[1])), H_drives, Hₐ_drift; kwargs...)
+#     end
+    
+#     function ParameterizedQuantumSystem(H_drift::AbstractMatrix{ℂ},Hₐ_drift::AbstractMatrix{ℂ}; kwargs...) where ℂ <: Number
+#         @assert !isempty(H_drives) "At least one drive is required"
+#         @assert length(Hₐ_drives) == length(H_drives) "Size has to be the same"
+#         return ParameterizedQuantumSystem(H_drift, Matrix{ℂ}[], Hₐ_drift; kwargs...)
+#     end
+
+#     function ParameterizedQuantumSystem(system::QuantumSystem,Hₐ_drift::AbstractMatrix{ℂ}; kwargs...) where ℂ <: Number
+#         return new(
+#             system.H,
+#             system.G,
+#             a -> sparse(Isomorphisms.G(Hₐ_drift)),
+#             system.∂G,
+#             system.n_drives,
+#             system.levels,
+#             system.params
+#         )
+
+#     end
+
+#     function ParameterizedQuantumSystem(system::QuantumSystem,Hₐ_drives::Vector{<:AbstractMatrix{ℂ}}; kwargs...) where ℂ <: Number
+        
+#         Gₐ_drives = sparse.(Isomorphisms.G.(Hₐ_drives))
+#         return new(
+#             system.H,
+#             system.G,
+#             a -> sum(a .* Gₐ_drives),
+#             system.∂G,
+#             system.n_drives,
+#             system.levels,
+#             system.params
+#         )
+
+#     end
+
+# end
+
 
 #***********************************************************************************************#
 

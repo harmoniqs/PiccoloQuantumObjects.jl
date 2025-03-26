@@ -639,31 +639,31 @@ end
 const ⊗ = kron
 
 function adjoint_unitary_rollout(trajectory::NamedTrajectory{Float64},system::ParameterizedQuantumSystem;
-    unitary_name = :Ũ⃗,drive_name=:a)
+    unitary_name::Symbol = :Ũ⃗, drive_name::Symbol=:a, indices::AbstractVector{Int64}=1:length(system.Gₐ))
     
     Ĩ⃗ = operator_to_iso_vec(Matrix{ComplexF64}(I(system.levels)))
 
     Ũ⃗ = zeros(trajectory[unitary_name].size)
-    Ũ⃗ₐ = zeros(trajectory[unitary_name].size)
+    Ũ⃗ₐ = [zeros(trajectory[unitary_name].size) for i ∈ indices]
 
-    Ũ⃗[:,1] = Ĩ⃗
-    for t = 2:trajectory.T
-        aₜ₋₁ = trajectory[drive_name][:, t - 1]
-        
+    for (idx,i) ∈ enumerate(indices)
+        Ũ⃗[:,1] = Ĩ⃗
+        for t = 2:trajectory.T
+            aₜ₋₁ = trajectory[drive_name][:, t - 1]
+            
 
-        Ũₜ₋₁ = (Ũ⃗[:, t - 1])
-        Ũₐₜ₋₁ = (Ũ⃗ₐ[:, t - 1])
-        
-        Ĝ = a_ ->  [I(system.levels)⊗(system.G(a_)) I(system.levels)⊗(system.Gₐ(a_)) ;  I(system.levels)⊗(system.G(a_)*0) I(system.levels)⊗(system.G(a_)) ]
-        
-
-        out = expv(get_timesteps(trajectory)[t-1], Ĝ(aₜ₋₁), vcat((Ũₐₜ₋₁),(Ũₜ₋₁)))
-        
-        Ũ⃗[:, t] = (out[end÷2+1:end])
-        Ũ⃗ₐ[:, t] = (out[1:end÷2])
+            Ũₜ₋₁ = (Ũ⃗[:, t - 1])
+            Ũₐₜ₋₁ = (Ũ⃗ₐ[idx][:, t - 1])
+            
+            Ĝ = a_ ->  [I(system.levels)⊗(system.G(a_)) I(system.levels)⊗(system.Gₐ[i](a_)) ;  I(system.levels)⊗(system.G(a_)*0) I(system.levels)⊗(system.G(a_)) ]
+            
+            out = expv(get_timesteps(trajectory)[t-1], Ĝ(aₜ₋₁), vcat((Ũₐₜ₋₁),(Ũₜ₋₁)))
+            
+            Ũ⃗[:, t] = (out[end÷2+1:end])
+            Ũ⃗ₐ[idx][:, t] = (out[1:end÷2])
+        end
     end
     return Ũ⃗,Ũ⃗ₐ
-
 end
 
 # ----------------------------------------------------------------------------- #
