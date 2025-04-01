@@ -683,6 +683,9 @@ function variational_rollout(
         next!(p)
     end
 
+    # collect into list of matrices
+    Ψ̃_vars = collect.(eachslice(reshape(Ψ̃_vars, (:, size(Ψ̃)...)), dims=1))
+
     return Ψ̃, Ψ̃_vars
 end
 
@@ -733,6 +736,9 @@ function variational_unitary_rollout(
         Ũ⃗_vars[:, t] .= Ṽ⃗ₜ[length(Ũ⃗_init) + 1:end]
         next!(p)
     end
+
+    # collect into list of matrices
+    Ũ⃗_vars = collect.(eachslice(reshape(Ũ⃗_vars, (:, size(Ũ⃗)...)), dims=1))
 
     return Ũ⃗, Ũ⃗_vars
 end
