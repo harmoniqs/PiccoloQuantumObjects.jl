@@ -7,9 +7,10 @@ export unitary_fidelity
 export unitary_free_phase_fidelity
 
 export rollout
+export variational_rollout
 export open_rollout
 export unitary_rollout
-export adjoint_unitary_rollout
+export variational_unitary_rollout
 export lab_frame_unitary_rollout
 export lab_frame_unitary_rollout_trajectory
 
@@ -449,14 +450,14 @@ using the system `system`.
 function unitary_rollout end
 
 function unitary_rollout(
-    Ũ⃗_init::AbstractVector{R1},
-    controls::AbstractMatrix{<:Real}{R2},
-    Δt::AbstractVector{R3},
+    Ũ⃗_init::AbstractVector{<:Real},
+    controls::AbstractMatrix{<:Real},
+    Δt::AbstractVector{<:Real},
     system::AbstractQuantumSystem;
     show_progress=false,
     integrator=expv,
     exp_vector_product=infer_is_evp(integrator),
-) where {R1 <: Real, R2 <: Real, R3 <: Real}
+)
     T = size(controls, 2)
 
     # Enable ForwardDiff
@@ -636,35 +637,132 @@ function unitary_rollout_fidelity(
     return unitary_rollout_fidelity(Ũ⃗_init, Ũ⃗_goal, controls, Δt, sys; kwargs...)
 end
 
-const ⊗ = kron
 
-function adjoint_unitary_rollout(trajectory::NamedTrajectory{Float64},system::ParameterizedQuantumSystem;
-    unitary_name::Symbol = :Ũ⃗, drive_name::Symbol=:a, indices::AbstractVector{Int64}=1:length(system.Gₐ))
-    
-    Ĩ⃗ = operator_to_iso_vec(Matrix{ComplexF64}(I(system.levels)))
+# ----------------------------------------------------------------------------- #
+# Variational rollouts
+# ----------------------------------------------------------------------------- #
 
-    Ũ⃗ = zeros(trajectory[unitary_name].size)
-    Ũ⃗ₐ = [zeros(trajectory[unitary_name].size) for i ∈ indices]
+"""
 
-    for (idx,i) ∈ enumerate(indices)
-        Ũ⃗[:,1] = Ĩ⃗
-        for t = 2:trajectory.T
-            aₜ₋₁ = trajectory[drive_name][:, t - 1]
-            
+"""
+function variational_rollout end
 
-            Ũₜ₋₁ = (Ũ⃗[:, t - 1])
-            Ũₐₜ₋₁ = (Ũ⃗ₐ[idx][:, t - 1])
-            
-            Ĝ = a_ ->  [I(system.levels)⊗(system.G(a_)) I(system.levels)⊗(system.Gₐ[i](a_)) ;  I(system.levels)⊗(system.G(a_)*0) I(system.levels)⊗(system.G(a_)) ]
-            
-            out = expv(get_timesteps(trajectory)[t-1], Ĝ(aₜ₋₁), vcat((Ũₐₜ₋₁),(Ũₜ₋₁)))
-            
-            Ũ⃗[:, t] = (out[end÷2+1:end])
-            Ũ⃗ₐ[idx][:, t] = (out[1:end÷2])
+function variational_rollout(
+    ψ̃_init::AbstractVector{<:Real},
+    controls::AbstractMatrix{<:Real},
+    Δt::AbstractVector{<:Real},
+    system::VariationalQuantumSystem;
+    show_progress=false,
+    integrator=expv,
+    exp_vector_product=infer_is_evp(integrator),
+)
+    T = size(controls, 2)
+
+    # Enable ForwardDiff
+    R = Base.promote_eltype(ψ̃_init, controls, Δt)
+    Ψ̃ = zeros(R, length(ψ̃_init), T)
+    Ψ̃_vars = zeros(R, length(system.G_vars) * length(ψ̃_init), T)
+
+    # Variational generator
+    Ĝ = a -> Isomorphisms.var_G(system.G(a), [G(a) for G in system.G_vars])
+
+    Ψ̃[:, 1] .= ψ̃_init
+
+    p = Progress(T-1; enabled=show_progress)
+    for t = 2:T
+        aₜ₋₁ = controls[:, t - 1]
+        Ĝₜ₋₁ = Ĝ(aₜ₋₁)
+        Ṽₜ₋₁ = [Ψ̃[:, t - 1]; Ψ̃_vars[:, t - 1]]
+        if exp_vector_product
+            Ṽₜ = integrator(Δt[t - 1], Ĝₜ₋₁, Ṽₜ₋₁)
+        else
+            Ṽₜ = integrator(Matrix(Ĝₜ₋₁) * Δt[t - 1]) * Ṽₜ₋₁
         end
+        Ψ̃[:, t] .= Ṽₜ[1:length(ψ̃_init)]
+        Ψ̃_vars[:, t] .= Ṽₜ[length(ψ̃_init) + 1:end]
+        next!(p)
     end
-    return Ũ⃗,Ũ⃗ₐ
+
+    return Ψ̃, Ψ̃_vars
 end
+
+variational_rollout(ψ::Vector{<:Complex}, args...; kwargs...) =
+    variational_rollout(ket_to_iso(ψ), args...; kwargs...)
+
+
+"""
+
+"""
+function variational_unitary_rollout end
+
+function variational_unitary_rollout(
+    Ũ⃗_init::AbstractVector{<:Real},
+    controls::AbstractMatrix{<:Real},
+    Δt::AbstractVector{<:Real},
+    system::VariationalQuantumSystem;
+    show_progress=false,
+    integrator=expv,
+    exp_vector_product=infer_is_evp(integrator),
+)
+    T = size(controls, 2)
+
+    # Enable ForwardDiff
+    R = Base.promote_eltype(Ũ⃗_init, controls, Δt)
+    Ũ⃗ = zeros(R, length(Ũ⃗_init), T)
+    Ũ⃗_vars = zeros(R, length(system.G_vars) * length(Ũ⃗_init), T)
+
+    # Variational generator
+    Ĝ = a -> Isomorphisms.var_G(
+        kron(I(system.levels), system.G(a)),
+        [kron(I(system.levels), G(a)) for G in system.G_vars]
+    )
+
+    Ũ⃗[:, 1] .= Ũ⃗_init
+
+    p = Progress(T - 1; enabled=show_progress)
+    for t = 2:T
+        aₜ₋₁ = controls[:, t - 1]
+        Ĝₜ₋₁ = Ĝ(aₜ₋₁)
+        Ṽ⃗ₜ₋₁ = [Ũ⃗[:, t - 1]; Ũ⃗_vars[:, t - 1]]
+        if exp_vector_product
+            Ṽ⃗ₜ = integrator(Δt[t - 1], Ĝₜ₋₁, Ṽ⃗ₜ₋₁)
+        else
+            Ṽ⃗ₜ = integrator(Matrix(Ĝₜ₋₁) * Δt[t - 1]) * Ṽ⃗ₜ₋₁
+        end
+        Ũ⃗[:, t] .= Ṽ⃗ₜ[1:length(Ũ⃗_init)]
+        Ũ⃗_vars[:, t] .= Ṽ⃗ₜ[length(Ũ⃗_init) + 1:end]
+        next!(p)
+    end
+
+    return Ũ⃗, Ũ⃗_vars
+end
+
+function variational_unitary_rollout(
+    controls::AbstractMatrix{<:Real},
+    Δt::AbstractVector,
+    system::VariationalQuantumSystem;
+    kwargs...
+)
+    Ĩ⃗ = operator_to_iso_vec(Matrix{ComplexF64}(I(system.levels)))
+    return variational_unitary_rollout(Ĩ⃗, controls, Δt, system; kwargs...)
+end
+
+function variational_unitary_rollout(
+    traj::NamedTrajectory,
+    system::VariationalQuantumSystem;
+    unitary_name::Symbol=:Ũ⃗,
+    drive_name::Symbol=:a,
+    kwargs...
+)
+    return variational_unitary_rollout(
+        traj.initial[unitary_name],
+        traj[drive_name],
+        get_timesteps(traj),
+        system;
+        kwargs...
+    )
+end
+
 
 # ----------------------------------------------------------------------------- #
 # Experimental rollouts
@@ -784,6 +882,11 @@ end
     )
     iso_vec_dim = length(operator_to_iso_vec(sys.H(zeros(sys.n_drives))))
     @test size(result2) == (iso_vec_dim, T)
+end
+
+@testitem "Variational rollouts" begin
+    # TODO: Add variational rollout tests
+    @test_broken false
 end
 
 

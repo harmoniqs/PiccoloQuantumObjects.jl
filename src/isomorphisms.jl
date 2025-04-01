@@ -223,6 +223,32 @@ function iso_D(L::AbstractMatrix{ℂ}) where ℂ <: Number
     return iso(kron(conj(L), L) - 1 / 2 * ad_vec(L'L, anti=true))
 end
 
+@doc raw"""
+    var_G(G::AbstractMatrix{<:Real}, G_vars::AbstractVector{<:AbstractMatrix{<:Real}})
+
+Returns the variational generator of `G` with variational derivatives, `G_vars`.
+
+The variational generator is 
+```math
+\text{var}_G(G, [G_a, G_b]) = \mqty( G & 0 & 0 \\ G_a & G & 0 \\ G_b & 0 & G )
+```
+where `G` is the isomorphism of a Hamiltonian and `G_a` and `G_b` are the variational 
+derivatives of `G` for parameters `a` and `b`, respectively.
+"""
+function var_G(
+    G::AbstractMatrix{ℝ},
+    G_vars::AbstractVector{<:AbstractMatrix{<:Real}}
+) where ℝ <: Real
+    n, m = size(G)
+    v = length(G_vars)
+    G_0 = kron(I(v + 1), G)
+    G_V = spzeros(ℝ, (v + 1) * n, (v + 1) * m)
+    for i = eachindex(G_vars)
+        G_V[i * n + 1:(i + 1) * n, 1:m] .= G_vars[i]
+    end
+    return G_0 + G_V
+end
+
 # *************************************************************************** #
 
 @testitem "Test ket isomorphisms" begin
@@ -302,6 +328,30 @@ end
     op = [0 -im; im 0]
     ad_H = ad_vec(op)
     @test ad_H ≈ [0 -im -im 0; im 0 0 -im; im 0 0 -im; 0 im im 0]
+end
+
+@testitem "Test variational G isomorphism" begin
+    using PiccoloQuantumObjects: Isomorphisms.var_G
+    
+    G = [1.0 2.0; 3.0 4.0]
+    G_var1 = [0.0 1.0; 1.0 0.0]
+    G_var2 = [0.0 0.0; 1.0 1.0]
+
+    G_vars = [G_var1]
+    Ĝ = var_G(G, G_vars)
+    @test Ĝ ≈ [1.0 2.0 0.0 0.0; 
+                   3.0 4.0 0.0 0.0; 
+                   0.0 1.0 1.0 2.0; 
+                   1.0 0.0 3.0 4.0]
+
+    G_vars = [G_var1, G_var2]
+    Ĝ = var_G(G, G_vars)
+    @test Ĝ ≈  [1.0 2.0 0.0 0.0 0.0 0.0; 
+                    3.0 4.0 0.0 0.0 0.0 0.0; 
+                    0.0 1.0 1.0 2.0 0.0 0.0; 
+                    1.0 0.0 3.0 4.0 0.0 0.0;
+                    0.0 0.0 0.0 0.0 1.0 2.0; 
+                    1.0 1.0 0.0 0.0 3.0 4.0]
 end
 
 end
