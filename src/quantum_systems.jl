@@ -343,16 +343,7 @@ struct VariationalQuantumSystem <: AbstractQuantumSystem
             ∂G_vars = [a -> [spzeros(size(G)) for G in G_drives] for G in G_vars]
         end
 
-        return new(
-            H,
-            G,
-            ∂G,
-            G_vars,
-            ∂G_vars,
-            n_drives,
-            levels,
-            params
-        )
+        return new(H, G, ∂G, G_vars, ∂G_vars, n_drives, levels, params)
     end
 
     function VariationalQuantumSystem(
@@ -379,13 +370,12 @@ struct VariationalQuantumSystem <: AbstractQuantumSystem
         @assert !isempty(H_vars) "At least one variational operator is required"
         G = a -> Isomorphisms.G(sparse(H(a)))
         ∂G = generator_jacobian(G)
-        G_vars = [a -> Isomorphisms.G(sparse(H(a))) for H in H_vars]
-        ∂G_vars = [generator_jacobian(G) for G in G_vars]
+        G_vars = Function[a -> Isomorphisms.G(sparse(H_v(a))) for H_v in H_vars]
+        ∂G_vars = Function[generator_jacobian(G_v) for G_v in G_vars]
         levels = size(H(zeros(n_drives)), 1)
-        return new(H, G, G_vars, ∂G, ∂G_vars, n_drives, levels, params)
+        return new(H, G, ∂G, G_vars, ∂G_vars, n_drives, levels, params)
     end
 end
-
 
 #***********************************************************************************************#
 
@@ -539,6 +529,65 @@ end
     @test get_drift(system) == H_drift
     @test get_drives(system) == H_drives
     @test system.dissipation_operators == dissipation_operators
+
+end
+
+@testitem "Variational system creation" begin
+    # default
+    varsys1 = VariationalQuantumSystem(
+        0.0 * PAULIS.Z,
+        [PAULIS.X, PAULIS.Y],
+        [PAULIS.X, PAULIS.Y] 
+    )
+
+    # no drift
+    varsys2 = VariationalQuantumSystem(
+        [PAULIS.X, PAULIS.Y],
+        [PAULIS.X, PAULIS.Y] 
+    )
+
+    a = [1.0; 2.0]
+    G_X = Isomorphisms.G(PAULIS.X)
+    G_Y = Isomorphisms.G(PAULIS.Y)
+    G = a[1] * G_X + a[2] * G_Y
+    ∂G_vars = [zeros(size(G_X)), zeros(size(G_Y))]
+    for varsys in [varsys1, varsys2]
+        @assert varsys isa VariationalQuantumSystem
+        @assert varsys.n_drives == 2
+        @assert length(varsys.G_vars) == 2
+        @assert varsys.G(a) ≈ G
+        @assert varsys.G_vars[1](a) ≈ G_X
+        @assert varsys.G_vars[2](a) ≈ G_Y
+        @assert varsys.∂G_vars[1](a) ≈ ∂G_vars
+        @assert varsys.∂G_vars[2](a) ≈ ∂G_vars
+    end
+
+    # single sensitivity
+    varsys = VariationalQuantumSystem(
+        [PAULIS.X, PAULIS.Y],
+        [PAULIS.X] 
+    )
+    @assert varsys isa VariationalQuantumSystem
+    @assert varsys.n_drives == 2
+    @assert length(varsys.G_vars) == 1
+    @assert varsys.G(a) ≈ G
+    @assert varsys.G_vars[1](a) ≈ G_X
+    @assert varsys.∂G_vars[1](a) ≈ ∂G_vars
+
+    # functional sensitivity
+    varsys = VariationalQuantumSystem(
+        a -> a[1] * PAULIS.X + a[2] * PAULIS.Y,
+        [a -> a[1] * PAULIS.X, a -> PAULIS.Y],
+        2
+    )
+    @assert varsys isa VariationalQuantumSystem
+    @assert varsys.n_drives == 2
+    @assert length(varsys.G_vars) == 2
+    @assert varsys.G(a) ≈ G
+    @assert varsys.G_vars[1](a) ≈ a[1] * G_X
+    @assert varsys.G_vars[2](a) ≈ G_Y
+    @assert varsys.∂G_vars[1](a) ≈ [G_X, zeros(size(G_Y))]
+    @assert varsys.∂G_vars[2](a) ≈ ∂G_vars
 
 end
 
