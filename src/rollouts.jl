@@ -7,8 +7,10 @@ export unitary_fidelity
 export unitary_free_phase_fidelity
 
 export rollout
+export variational_rollout
 export open_rollout
 export unitary_rollout
+export variational_unitary_rollout
 export lab_frame_unitary_rollout
 export lab_frame_unitary_rollout_trajectory
 
@@ -205,7 +207,28 @@ rollout(ψ::Vector{<:Complex}, args...; kwargs...) =
 function rollout(
     inits::AbstractVector{<:AbstractVector}, args...; kwargs...
 )
-    return vcat([rollout(state, args...; kwargs...) for state ∈ inits]...)
+    return [rollout(state, args...; kwargs...) for state ∈ inits]
+end
+
+function rollout(
+    traj::NamedTrajectory,
+    system::AbstractQuantumSystem;
+    state_name::Symbol=:ψ̃,
+    drive_name::Symbol=:a,
+    kwargs...
+)   
+    # Get the initial state names
+    state_names = [
+        name for name ∈ traj.names if startswith(string(name), string(state_name))
+    ]
+
+    return rollout(
+        length(state_names) == 1 ? traj.initial[state_name] : [traj.initial[name] for name ∈ state_names],
+        traj[drive_name],
+        get_timesteps(traj),
+        system;
+        kwargs...
+    )
 end
 
 """
@@ -448,14 +471,14 @@ using the system `system`.
 function unitary_rollout end
 
 function unitary_rollout(
-    Ũ⃗_init::AbstractVector{R1},
-    controls::AbstractMatrix{<:Real}{R2},
-    Δt::AbstractVector{R3},
+    Ũ⃗_init::AbstractVector{<:Real},
+    controls::AbstractMatrix{<:Real},
+    Δt::AbstractVector{<:Real},
     system::AbstractQuantumSystem;
     show_progress=false,
     integrator=expv,
     exp_vector_product=infer_is_evp(integrator),
-) where {R1 <: Real, R2 <: Real, R3 <: Real}
+)
     T = size(controls, 2)
 
     # Enable ForwardDiff
@@ -635,6 +658,250 @@ function unitary_rollout_fidelity(
     return unitary_rollout_fidelity(Ũ⃗_init, Ũ⃗_goal, controls, Δt, sys; kwargs...)
 end
 
+
+# ----------------------------------------------------------------------------- #
+# Variational rollouts
+# ----------------------------------------------------------------------------- #
+
+"""
+    variational_rollout(
+        ψ̃_init::AbstractVector{<:Real},
+        controls::AbstractMatrix{<:Real},
+        Δt::AbstractVector{<:Real},
+        system::VariationalQuantumSystem;
+        show_progress::Bool=false,
+        integrator::Function=expv,
+        exp_vector_product::Bool=infer_is_evp(integrator)
+    )
+    variational_rollout(ψ::Vector{<:Complex}, args...; kwargs...)
+    variational_rollout(inits::AbstractVector{<:AbstractVector}, args...; kwargs...)
+    variational_rollout(
+        traj::NamedTrajectory, 
+        system::AbstractQuantumSystem; 
+        state_name::Symbol=:ψ̃,
+        drive_name::Symbol=:a,
+        kwargs...
+    )   
+
+Simulates the variational evolution of a quantum state under a given control trajectory.
+
+# Returns
+- `Ψ̃::Matrix{<:Real}`: The evolved quantum state at each timestep.
+- `Ψ̃_vars::Vector{<:Matrix{<:Real}}`: The variational derivatives of the 
+    quantum state with respect to the variational parameters.
+
+# Notes
+This function computes the variational evolution of a quantum state using the 
+variational generators of the system. It supports autodifferentiable controls and 
+timesteps, making it suitable for optimization tasks. The variational derivatives are 
+computed alongside the state evolution, enabling sensitivity analysis and gradient-based 
+optimization.
+"""
+function variational_rollout end
+
+function variational_rollout(
+    ψ̃_init::AbstractVector{<:Real},
+    controls::AbstractMatrix{<:Real},
+    Δt::AbstractVector{<:Real},
+    system::VariationalQuantumSystem;
+    show_progress=false,
+    integrator=expv,
+    exp_vector_product=infer_is_evp(integrator),
+)
+    T = size(controls, 2)
+
+    # Enable ForwardDiff
+    R = Base.promote_eltype(ψ̃_init, controls, Δt)
+    Ψ̃ = zeros(R, length(ψ̃_init), T)
+    Ψ̃_vars = zeros(R, length(system.G_vars) * length(ψ̃_init), T)
+
+    # Variational generator
+    Ĝ = a -> Isomorphisms.var_G(system.G(a), [G(a) for G in system.G_vars])
+
+    Ψ̃[:, 1] .= ψ̃_init
+
+    p = Progress(T-1; enabled=show_progress)
+    for t = 2:T
+        aₜ₋₁ = controls[:, t - 1]
+        Ĝₜ₋₁ = Ĝ(aₜ₋₁)
+        Ṽₜ₋₁ = [Ψ̃[:, t - 1]; Ψ̃_vars[:, t - 1]]
+        if exp_vector_product
+            Ṽₜ = integrator(Δt[t - 1], Ĝₜ₋₁, Ṽₜ₋₁)
+        else
+            Ṽₜ = integrator(Matrix(Ĝₜ₋₁) * Δt[t - 1]) * Ṽₜ₋₁
+        end
+        Ψ̃[:, t] .= Ṽₜ[1:length(ψ̃_init)]
+        Ψ̃_vars[:, t] .= Ṽₜ[length(ψ̃_init) + 1:end]
+        next!(p)
+    end
+
+    # collect into vector of matrices
+    if length(system.G_vars) > 1
+        Ψ̃_vars = collect.(eachslice(reshape(Ψ̃_vars, (:, size(Ψ̃)...)), dims=1))
+    end
+
+    return Ψ̃, Ψ̃_vars
+end
+
+variational_rollout(ψ::Vector{<:Complex}, args...; kwargs...) =
+    variational_rollout(ket_to_iso(ψ), args...; kwargs...)
+
+function variational_rollout(
+    inits::AbstractVector{<:AbstractVector}, args...; kwargs...
+)
+    N = length(inits)
+
+    # First call
+    ψ̃1, ψ̃_vars1 = variational_rollout(inits[1], args...; kwargs...)
+
+    # Preallocate the rest
+    ψ̃s = Vector{typeof(ψ̃1)}(undef, N)
+    ψ̃_vars = Vector{typeof(ψ̃_vars1)}(undef, N)
+    ψ̃s[1] = ψ̃1
+    ψ̃_vars[1] = ψ̃_vars1
+    for i = 2:N
+        ψ̃s[i], ψ̃_vars[i] = variational_rollout(inits[i], args...; kwargs...)
+    end
+    return ψ̃s, ψ̃_vars
+end
+
+
+function variational_rollout(
+    traj::NamedTrajectory,
+    system::AbstractQuantumSystem;
+    state_name::Symbol=:ψ̃,
+    drive_name::Symbol=:a,
+    kwargs...
+)   
+    # Get the initial state names
+    state_names = [
+        name for name ∈ traj.names if startswith(string(name), string(state_name))
+    ]
+
+    return variational_rollout(
+        length(state_names) == 1 ? traj.initial[state_name] : [traj.initial[name] for name ∈ state_names],
+        traj[drive_name],
+        get_timesteps(traj),
+        system;
+        kwargs...
+    )
+end
+
+
+"""
+    variational_unitary_rollout(
+        Ũ⃗_init::AbstractVector{<:Real},
+        controls::AbstractMatrix{<:Real},
+        Δt::AbstractVector{<:Real},
+        system::VariationalQuantumSystem;
+        show_progress::Bool=false,
+        integrator::Function=expv,
+        exp_vector_product::Bool=infer_is_evp(integrator)
+    )
+    variational_unitary_rollout(
+        controls::AbstractMatrix{<:Real},
+        Δt::AbstractVector,
+        system::VariationalQuantumSystem;
+        kwargs...
+    )
+    variational_unitary_rollout(
+        traj::NamedTrajectory,
+        system::VariationalQuantumSystem;
+        unitary_name::Symbol=:Ũ⃗,
+        drive_name::Symbol=:a,
+        kwargs...
+    )
+
+Simulates the variational evolution of a quantum state under a given control trajectory.
+
+# Returns
+- `Ũ⃗::Matrix{<:Real}`: The evolved unitary at each timestep.
+- `Ũ⃗_vars::Vector{<:Matrix{<:Real}}`: The variational derivatives of the  unitary with 
+    respect to the variational parameters.
+
+# Notes
+This function computes the variational evolution of a unitary using the 
+variational generators of the system. It supports autodifferentiable controls and 
+timesteps, making it suitable for optimization tasks. The variational derivatives are 
+computed alongside the state evolution, enabling sensitivity analysis and gradient-based 
+optimization.
+"""
+function variational_unitary_rollout end
+
+function variational_unitary_rollout(
+    Ũ⃗_init::AbstractVector{<:Real},
+    controls::AbstractMatrix{<:Real},
+    Δt::AbstractVector{<:Real},
+    system::VariationalQuantumSystem;
+    show_progress=false,
+    integrator=expv,
+    exp_vector_product=infer_is_evp(integrator),
+)
+    T = size(controls, 2)
+
+    # Enable ForwardDiff
+    R = Base.promote_eltype(Ũ⃗_init, controls, Δt)
+    Ũ⃗ = zeros(R, length(Ũ⃗_init), T)
+    Ũ⃗_vars = zeros(R, length(system.G_vars) * length(Ũ⃗_init), T)
+
+    # Variational generator
+    Ĝ = a -> Isomorphisms.var_G(
+        kron(I(system.levels), system.G(a)),
+        [kron(I(system.levels), G(a)) for G in system.G_vars]
+    )
+
+    Ũ⃗[:, 1] .= Ũ⃗_init
+
+    p = Progress(T - 1; enabled=show_progress)
+    for t = 2:T
+        aₜ₋₁ = controls[:, t - 1]
+        Ĝₜ₋₁ = Ĝ(aₜ₋₁)
+        Ṽ⃗ₜ₋₁ = [Ũ⃗[:, t - 1]; Ũ⃗_vars[:, t - 1]]
+        if exp_vector_product
+            Ṽ⃗ₜ = integrator(Δt[t - 1], Ĝₜ₋₁, Ṽ⃗ₜ₋₁)
+        else
+            Ṽ⃗ₜ = integrator(Matrix(Ĝₜ₋₁) * Δt[t - 1]) * Ṽ⃗ₜ₋₁
+        end
+        Ũ⃗[:, t] .= Ṽ⃗ₜ[1:length(Ũ⃗_init)]
+        Ũ⃗_vars[:, t] .= Ṽ⃗ₜ[length(Ũ⃗_init) + 1:end]
+        next!(p)
+    end
+
+    # collect into vector of matrices
+    if length(system.G_vars) > 1
+        Ũ⃗_vars = collect.(eachslice(reshape(Ũ⃗_vars, (:, size(Ũ⃗)...)), dims=1))
+    end
+
+    return Ũ⃗, Ũ⃗_vars
+end
+
+function variational_unitary_rollout(
+    controls::AbstractMatrix{<:Real},
+    Δt::AbstractVector,
+    system::VariationalQuantumSystem;
+    kwargs...
+)
+    Ĩ⃗ = operator_to_iso_vec(Matrix{ComplexF64}(I(system.levels)))
+    return variational_unitary_rollout(Ĩ⃗, controls, Δt, system; kwargs...)
+end
+
+function variational_unitary_rollout(
+    traj::NamedTrajectory,
+    system::VariationalQuantumSystem;
+    unitary_name::Symbol=:Ũ⃗,
+    drive_name::Symbol=:a,
+    kwargs...
+)
+    return variational_unitary_rollout(
+        traj.initial[unitary_name],
+        traj[drive_name],
+        get_timesteps(traj),
+        system;
+        kwargs...
+    )
+end
+
+
 # ----------------------------------------------------------------------------- #
 # Experimental rollouts
 # ----------------------------------------------------------------------------- #
@@ -648,23 +915,9 @@ end
     include("../test/test_utils.jl")
 
     traj = named_trajectory_type_1()
-
-    sys = QuantumSystem(0 * GATES[:Z], [GATES[:X], GATES[:Y]])
-
-    U_goal = GATES[:H]
-
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y])
+    U_goal = GATES.H
     embedded_U_goal = EmbeddedOperator(U_goal, sys)
-
-    # T = 51
-    # Δt = 0.2
-    # ts = fill(Δt, T)
-    # as = collect([π/(T-1)/Δt * sin.(π*(0:T-1)/(T-1)).^2 zeros(T)]')
-
-    # prob = UnitarySmoothPulseProblem(
-    #     sys, U_goal, T, Δt, a_guess=as,
-    #     ipopt_options=IpoptOptions(print_level=1),
-    #     piccolo_options=PiccoloOptions(verbose=false, free_time=false)
-    # )
 
     ψ = ComplexF64[1, 0]
     ψ_goal = U_goal * ψ
@@ -720,7 +973,7 @@ end
     using ForwardDiff
     using ExponentialAction
 
-    sys = QuantumSystem(0 * GATES[:Z], [GATES[:X], GATES[:Y]])
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y])
     T = 51
     Δt = 0.2
     ts = fill(Δt, T)
@@ -753,6 +1006,50 @@ end
     )
     iso_vec_dim = length(operator_to_iso_vec(sys.H(zeros(sys.n_drives))))
     @test size(result2) == (iso_vec_dim, T)
+end
+
+@testitem "Test variational rollouts" begin
+    include("../test/test_utils.jl")
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y])
+    varsys1 = VariationalQuantumSystem([PAULIS.X, PAULIS.Y], [PAULIS.X])
+    varsys2 = VariationalQuantumSystem([PAULIS.X, PAULIS.Y], [PAULIS.X, PAULIS.Y])
+    U_goal = GATES.H
+
+    # state rollouts
+    traj = named_trajectory_type_2()
+    ψ̃s_def = rollout(traj, sys) 
+    dims = size(ψ̃s_def[1])
+    for vs in [varsys1, varsys2]
+        ψ̃s, ψ̃s_vars = variational_rollout(traj, vs)
+        @assert ψ̃s ≈ ψ̃s_def
+        if length(vs.G_vars) == 1
+            for ψ̃_var in ψ̃s_vars
+                @assert size(ψ̃_var) == dims
+            end
+        else
+            @assert length(ψ̃s_vars[1]) == length(vs.G_vars)
+            for ψ̃_var in ψ̃s_vars
+                for ψ̃_var_op in ψ̃_var
+                    @assert size(ψ̃_var_op) == dims
+                end
+            end
+        end
+    end
+
+    # unitary rollouts
+    traj = named_trajectory_type_1()
+    Ũ⃗_def = unitary_rollout(traj, sys)
+
+    for vs in [varsys1, varsys2]
+        Ũ⃗, Ũ_vars = variational_unitary_rollout(traj, vs)
+        @assert Ũ⃗ ≈ Ũ⃗_def
+        if length(vs.G_vars) == 1
+            @assert size(Ũ_vars) == size(Ũ⃗_def)
+        else
+            @assert length(Ũ_vars) == length(vs.G_vars)
+            @assert size(Ũ_vars[1]) == size(Ũ⃗_def)
+        end
+    end
 end
 
 
