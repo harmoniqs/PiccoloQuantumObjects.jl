@@ -446,8 +446,9 @@ end
 end
 
 @testitem "System creation with Hamiltonian function" begin
-    H(a) = PAULIS[:Z] + a[1] * PAULIS[:X]
-    system = QuantumSystem(H, 1)
+    system = QuantumSystem(
+        a -> PAULIS[:Z] + a[1] * PAULIS[:X], 1
+    )
     @test system isa QuantumSystem
     @test get_drift(system) == PAULIS[:Z]
     @test get_drives(system) == [PAULIS[:X]]
@@ -458,12 +459,12 @@ end
     @test system.∂G(a) == compare.∂G(a)
 
     # test three drives
-    H(a) = a[1] * PAULIS[:X] + a[2] * PAULIS[:Y] + a[3] * PAULIS[:Z]
-    system = QuantumSystem(H, 3)
+    system = QuantumSystem(
+        a -> a[1] * PAULIS[:X] + a[2] * PAULIS[:Y] + a[3] * PAULIS[:Z], 3
+    )
     @test system isa QuantumSystem
     @test get_drift(system) == zeros(2, 2)
     @test get_drives(system) == [PAULIS[:X], PAULIS[:Y], PAULIS[:Z]]
-
 end
 
 @testitem "Open system creation" begin
