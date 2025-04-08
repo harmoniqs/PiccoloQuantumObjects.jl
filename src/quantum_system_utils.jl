@@ -342,8 +342,8 @@ end
     r = [0, 1, 2, 3, 4]
     r /= norm(r)
     R2 = exp(-im * sum([θ * H for (H, θ) in zip(complete_gen, r)]))
-    CZ = [1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -1]
-    CX = [1 0 0 0; 0 1 0 0; 0 0 0 1; 0 0 1 0]
+    CZ = GATES[:CZ]
+    CX = GATES[:CX]
 
     # Pass
     @test is_reachable(R2, complete_gen, verbose=false)
