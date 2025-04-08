@@ -708,36 +708,36 @@ function variational_rollout(
     integrator=expv,
     exp_vector_product=infer_is_evp(integrator),
 )
+    V = length(system.G_vars)
+    N = length(ψ̃_init)
     T = size(controls, 2)
 
     # Enable ForwardDiff
     R = Base.promote_eltype(ψ̃_init, controls, Δt)
-    Ψ̃ = zeros(R, length(ψ̃_init), T)
-    Ψ̃_vars = zeros(R, length(system.G_vars) * length(ψ̃_init), T)
+    Ψ̃ = zeros(R, N, T)
+    Ψ̃_vars = [zeros(R, N, T) for _ = 1:V]
 
     # Variational generator
     Ĝ = a -> Isomorphisms.var_G(system.G(a), [G(a) for G in system.G_vars])
 
     Ψ̃[:, 1] .= ψ̃_init
+    Ṽₜ₋₁ = [ψ̃_init; zeros(R, N * V)]
 
     p = Progress(T-1; enabled=show_progress)
     for t = 2:T
         aₜ₋₁ = controls[:, t - 1]
         Ĝₜ₋₁ = Ĝ(aₜ₋₁)
-        Ṽₜ₋₁ = [Ψ̃[:, t - 1]; Ψ̃_vars[:, t - 1]]
         if exp_vector_product
             Ṽₜ = integrator(Δt[t - 1], Ĝₜ₋₁, Ṽₜ₋₁)
         else
             Ṽₜ = integrator(Matrix(Ĝₜ₋₁) * Δt[t - 1]) * Ṽₜ₋₁
         end
-        Ψ̃[:, t] .= Ṽₜ[1:length(ψ̃_init)]
-        Ψ̃_vars[:, t] .= Ṽₜ[length(ψ̃_init) + 1:end]
+        Ψ̃[:, t] .= Ṽₜ[1:N]
+        for i = 1:V
+            Ψ̃_vars[i][:, t] .= Ṽₜ[1 + i * N:(i + 1) * N]
+        end
+        Ṽₜ₋₁ = Ṽₜ
         next!(p)
-    end
-
-    # collect into vector of matrices
-    if length(system.G_vars) > 1
-        Ψ̃_vars = collect.(eachslice(reshape(Ψ̃_vars, (:, size(Ψ̃)...)), dims=1))
     end
 
     return Ψ̃, Ψ̃_vars
@@ -837,12 +837,14 @@ function variational_unitary_rollout(
     integrator=expv,
     exp_vector_product=infer_is_evp(integrator),
 )
+    V = length(system.G_vars)
+    N = length(Ũ⃗_init)
     T = size(controls, 2)
 
     # Enable ForwardDiff
     R = Base.promote_eltype(Ũ⃗_init, controls, Δt)
-    Ũ⃗ = zeros(R, length(Ũ⃗_init), T)
-    Ũ⃗_vars = zeros(R, length(system.G_vars) * length(Ũ⃗_init), T)
+    Ũ⃗ = zeros(R, N, T)
+    Ũ⃗_vars = [zeros(R, N, T) for _ = 1:V]
 
     # Variational generator
     Ĝ = a -> Isomorphisms.var_G(
@@ -851,25 +853,23 @@ function variational_unitary_rollout(
     )
 
     Ũ⃗[:, 1] .= Ũ⃗_init
+    Ṽ⃗ₜ₋₁ = [Ũ⃗_init; zeros(R, N * V)]
 
     p = Progress(T - 1; enabled=show_progress)
     for t = 2:T
         aₜ₋₁ = controls[:, t - 1]
         Ĝₜ₋₁ = Ĝ(aₜ₋₁)
-        Ṽ⃗ₜ₋₁ = [Ũ⃗[:, t - 1]; Ũ⃗_vars[:, t - 1]]
         if exp_vector_product
             Ṽ⃗ₜ = integrator(Δt[t - 1], Ĝₜ₋₁, Ṽ⃗ₜ₋₁)
         else
             Ṽ⃗ₜ = integrator(Matrix(Ĝₜ₋₁) * Δt[t - 1]) * Ṽ⃗ₜ₋₁
         end
-        Ũ⃗[:, t] .= Ṽ⃗ₜ[1:length(Ũ⃗_init)]
-        Ũ⃗_vars[:, t] .= Ṽ⃗ₜ[length(Ũ⃗_init) + 1:end]
+        Ũ⃗[:, t] .= Ṽ⃗ₜ[1:N]
+        for i = 1:V
+            Ũ⃗_vars[i][:, t] .= Ṽ⃗ₜ[1 + i * N:(i + 1) * N]
+        end
+        Ṽ⃗ₜ₋₁ = Ṽ⃗ₜ
         next!(p)
-    end
-
-    # collect into vector of matrices
-    if length(system.G_vars) > 1
-        Ũ⃗_vars = collect.(eachslice(reshape(Ũ⃗_vars, (:, size(Ũ⃗)...)), dims=1))
     end
 
     return Ũ⃗, Ũ⃗_vars
@@ -1017,39 +1017,40 @@ end
 
     # state rollouts
     traj = named_trajectory_type_2()
-    ψ̃s_def = rollout(traj, sys) 
+    ψ̃s_def = rollout(traj, sys)
+    ψ̃s_match = []
+    
     dims = size(ψ̃s_def[1])
     for vs in [varsys1, varsys2]
         ψ̃s, ψ̃s_vars = variational_rollout(traj, vs)
+        push!(ψ̃s_match, [ψ̃_vars[1] for ψ̃_vars in ψ̃s_vars])
+        
         @assert ψ̃s ≈ ψ̃s_def
-        if length(vs.G_vars) == 1
-            for ψ̃_var in ψ̃s_vars
+        @assert length(ψ̃s_vars[1]) == length(vs.G_vars)
+        for (i, ψ̃_vars) in enumerate(ψ̃s_vars)
+            for ψ̃_var in ψ̃_vars
                 @assert size(ψ̃_var) == dims
-            end
-        else
-            @assert length(ψ̃s_vars[1]) == length(vs.G_vars)
-            for ψ̃_var in ψ̃s_vars
-                for ψ̃_var_op in ψ̃_var
-                    @assert size(ψ̃_var_op) == dims
-                end
             end
         end
     end
+    # same operator (different system)
+    @assert ψ̃s_match[1] ≈ ψ̃s_match[2]
 
     # unitary rollouts
     traj = named_trajectory_type_1()
     Ũ⃗_def = unitary_rollout(traj, sys)
+    Ũ⃗ᵥ1_match = []
 
     for vs in [varsys1, varsys2]
-        Ũ⃗, Ũ_vars = variational_unitary_rollout(traj, vs)
+        Ũ⃗, Ũ⃗_vars = variational_unitary_rollout(traj, vs)
+        push!(Ũ⃗ᵥ1_match, Ũ⃗_vars[1])
+
         @assert Ũ⃗ ≈ Ũ⃗_def
-        if length(vs.G_vars) == 1
-            @assert size(Ũ_vars) == size(Ũ⃗_def)
-        else
-            @assert length(Ũ_vars) == length(vs.G_vars)
-            @assert size(Ũ_vars[1]) == size(Ũ⃗_def)
-        end
+        @assert length(Ũ⃗_vars) == length(vs.G_vars)
+        @assert size(Ũ⃗_vars[1]) == size(Ũ⃗_def)
     end
+    # same operator (different system)
+    @assert Ũ⃗ᵥ1_match[1] ≈ Ũ⃗ᵥ1_match[2]
 end
 
 

@@ -236,15 +236,15 @@ where `G` is the isomorphism of a Hamiltonian and `G_a` and `G_b` are the variat
 derivatives of `G` for parameters `a` and `b`, respectively.
 """
 function var_G(
-    G::AbstractMatrix{ℝ},
-    G_vars::AbstractVector{<:AbstractMatrix{<:Real}}
-) where ℝ <: Real
+    G::AbstractMatrix{ℝ1},
+    G_vars::AbstractVector{<:AbstractMatrix{ℝ2}}
+) where {ℝ1 <: Real, ℝ2 <: Real}
     n, m = size(G)
     v = length(G_vars)
     G_0 = kron(I(v + 1), G)
-    G_V = spzeros(ℝ, (v + 1) * n, (v + 1) * m)
+    G_V = spzeros(ℝ2, (v + 1) * n, (v + 1) * m)
     for i = eachindex(G_vars)
-        G_V[i * n + 1:(i + 1) * n, 1:m] .= G_vars[i]
+        G_V[i * n + 1:(i + 1) * n, 1:m] = G_vars[i]
     end
     return G_0 + G_V
 end
