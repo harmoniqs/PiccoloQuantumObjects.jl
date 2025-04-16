@@ -15,13 +15,6 @@ using SparseArrays
 using TestItems
 using ForwardDiff
 
-function generator_jacobian(G::Function)
-    return function ∂G(a::AbstractVector{Float64})
-        ∂G⃗ = ForwardDiff.jacobian(a_ -> vec(G(a_)), a)
-        dim = Int(sqrt(size(∂G⃗, 1)))
-        return [reshape(∂G⃗ⱼ, dim, dim) for ∂G⃗ⱼ ∈ eachcol(∂G⃗)]
-    end
-end
 
 # ----------------------------------------------------------------------------- #
 # AbstractQuantumSystem
@@ -41,7 +34,8 @@ abstract type AbstractQuantumSystem end
 """
     get_drift(sys::AbstractQuantumSystem)
 
-Returns the drift Hamiltonian of the system.
+Returns the drift Hamiltonian of the system. Assumes zeroing out drives 
+leaves the drift.
 """
 get_drift(sys::AbstractQuantumSystem) = sys.H(zeros(sys.n_drives))
 
@@ -53,7 +47,7 @@ Returns the drive Hamiltonians of the system.
 function get_drives(sys::AbstractQuantumSystem)
     H_drift = get_drift(sys)
     # Basis vectors for controls will extract drive operators
-    return [sys.H(I[1:sys.n_drives, i]) - H_drift for i ∈ 1:sys.n_drives]
+    return [sys.H(I(size(H_drift))[1:sys.n_drives, i]) - H_drift for i ∈ 1:sys.n_drives]
 end
 
 

@@ -63,7 +63,7 @@ function unitary_fidelity(
     U = U[subspace, subspace]
     U_goal = U_goal[subspace, subspace]
     N = size(U, 1)
-    return abs(tr(U' * U_goal))^2 / N^2
+    return abs(tr(U_goal' * U))^2 / N^2
 end
 
 """
