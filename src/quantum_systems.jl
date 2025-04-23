@@ -318,7 +318,7 @@ A struct for storing time-dependent quantum dynamics and the appropriate gradien
 - `params::Dict{Symbol, Any}`: A dictionary of parameters.
 
 """
-struct TimeDependentQuantumSystem <: AbstractArray
+struct TimeDependentQuantumSystem <: AbstractQuantumSystem
     H::Function
     G::Function
     ∂G::Function
@@ -370,7 +370,24 @@ struct TimeDependentQuantumSystem <: AbstractArray
         )
     end
 
-    # TODO: other constructors (functional, no drift, no drive)
+    function TimeDependentQuantumSystem(H_drives:;Vector{<:AbstractMatric{ℂ}}; kwargs...) where ℂ <: Number
+        @assert !isemtpy(H_drives) "At least one drive is required."
+        return TimeDependentQuantumSystem(spzeros(ℂ, size(H_drives[1])), H_drives; kwargs...)
+    end
+
+    TimeDependentQuantumSystem(H_drift::AbstractMatrix{ℂ}; kwargs...) where ℂ <: Number = 
+        TimeDependentQuantumSystem(H_drift, Matrix{ℂ}[]; kwargs...)
+
+    function TimeDependentQuantumSystem(
+        H::Function,
+        n_drives::Int;
+        params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+    )
+        G = a, t -> Isomorphisms.G(sparse(H(a,t)))
+        ∂G = generator_jacobian(G)
+        levels = size(H(zeroes(n_drives)), 1)
+        return new(H, G, ∂G, n_drives, levels, params)
+    end
 
     # TODO: tests for this constructor
 
