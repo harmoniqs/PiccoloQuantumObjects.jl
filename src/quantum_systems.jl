@@ -4,6 +4,7 @@ export AbstractQuantumSystem
 export QuantumSystem
 export OpenQuantumSystem
 export VariationalQuantumSystem
+export TimeDependentQuantumSystem
 
 export get_drift
 export get_drives
@@ -370,7 +371,7 @@ struct TimeDependentQuantumSystem <: AbstractQuantumSystem
         )
     end
 
-    function TimeDependentQuantumSystem(H_drives:;Vector{<:AbstractMatric{ℂ}}; kwargs...) where ℂ <: Number
+    function TimeDependentQuantumSystem(H_drives::Vector{<:AbstractMatrix{ℂ}}; kwargs...) where ℂ <: Number
         @assert !isemtpy(H_drives) "At least one drive is required."
         return TimeDependentQuantumSystem(spzeros(ℂ, size(H_drives[1])), H_drives; kwargs...)
     end
