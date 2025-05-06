@@ -1,7 +1,7 @@
 name = "PiccoloQuantumObjects"
 uuid = "5a402ddf-f93c-42eb-975e-5582dcda653d"
 authors = ["Aaron Trowbridge <aaron.j.trowbridge@gmail.com> and contributors"]
-version = "0.4.1"
+version = "0.4.2"
 
 [deps]
 ExponentialAction = "e24c0720-ea99-47e8-929e-571b494574d3"
@@ -16,7 +16,7 @@ TestItems = "1c621080-faea-4a02-84b6-bbd5e436b8fe"
 
 [compat]
 ExponentialAction = "0.2"
-ForwardDiff = "0.10"
+ForwardDiff = "1.0"
 LinearAlgebra = "1.10, 1.11"
 NamedTrajectories = "0.3"
 ProgressMeter = "1.10"
