@@ -4,6 +4,7 @@ export AbstractQuantumSystem
 export QuantumSystem
 export OpenQuantumSystem
 export VariationalQuantumSystem
+export AbstractTimeDependentQuantumSystem
 export TimeDependentQuantumSystem
 
 export get_drift
@@ -63,6 +64,17 @@ function get_drives(sys::AbstractQuantumSystem)
     return [sys.H(I[1:sys.n_drives, i]) - H_drift for i ∈ 1:sys.n_drives]
 end
 
+
+# ----------------------------------------------------------------------------- #
+# AbstractTimeDependentQuantumSystem
+# ----------------------------------------------------------------------------- #
+
+"""
+    AbstractTimeDependentQuantumSystem
+
+Abstract type for defining time dependent systems.
+"""
+abstract type AbstractTimeDependentQuantumSystem end
 
 # ----------------------------------------------------------------------------- #
 # QuantumSystem
@@ -319,7 +331,7 @@ A struct for storing time-dependent quantum dynamics and the appropriate gradien
 - `params::Dict{Symbol, Any}`: A dictionary of parameters.
 
 """
-struct TimeDependentQuantumSystem <: AbstractQuantumSystem
+struct TimeDependentQuantumSystem <: AbstractTimeDependentQuantumSystem
     H::Function
     G::Function
     ∂G::Function
@@ -344,8 +356,8 @@ struct TimeDependentQuantumSystem <: AbstractQuantumSystem
         H_drives = sparse.(H_drives)
         G_drives = sparse.(Isomorphisms.G.(H_drives))
 
-        H = a, t -> H_drift + sum(a * cos(ω * t + ϕ) .* H for (ω, ϕ, H) in zip(carriers, phases, H_drives))
-        G = a, t -> G_drift + sum(a * cos(ω * t + ϕ) .* G for (ω, ϕ, G) in zip(carriers, phases, G_drives))
+        H = (a, t) -> H_drift + sum(a[i] * cos(ω * t + ϕ) .* H_i for (i, (ω, ϕ, H_i)) in enumerate(zip(carriers, phases, H_drives)))
+        G = (a, t) -> G_drift + sum(a[i] * cos(ω * t + ϕ) .* G_i for (i, (ω, ϕ, G_i)) in enumerate(zip(carriers, phases, G_drives)))
 
         function ∂G(a, t)
             # Preallocate the Jacobian
