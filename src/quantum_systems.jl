@@ -16,6 +16,11 @@ using SparseArrays
 using TestItems
 using ForwardDiff
 
+# TODO: 
+# 1. Notice that a -> [] and a, t -> [zeros(size(G_drift))]?
+# 2. What to do about if else function definitions? Bad practice at parse time.
+
+
 function generator_jacobian(G::Function)
     return function ∂G(a::AbstractVector{Float64})
         ∂G⃗ = ForwardDiff.jacobian(a_ -> vec(G(a_)), a)
@@ -292,6 +297,82 @@ struct OpenQuantumSystem <: AbstractQuantumSystem
     OpenQuantumSystem(system::QuantumSystem; kwargs...) = OpenQuantumSystem(
         system.H, system.n_drives; kwargs...
     )
+
+end
+
+# ----------------------------------------------------------------------------- #
+# TimeDependentQuantumSystem
+# ----------------------------------------------------------------------------- #
+
+"""
+    TimeDependentQuantumSystem <: AbstractQuantumSystem
+
+A struct for storing time-dependent quantum dynamics and the appropriate gradients.
+
+# Additional fields
+- `H::Function`: The Hamiltonian function with time: a, t -> H(a, t).
+- `G::Function`: The isomorphic generator function with time, a, t -> G(a, t).
+- `∂G::Function`: The generator jacobian function with time, a, t -> ∂G(a, t).
+- `n_drives::Int`: The number of drives in the system.
+- `levels::Int`: The number of levels in the system.
+- `params::Dict{Symbol, Any}`: A dictionary of parameters.
+
+"""
+struct TimeDependentQuantumSystem <: AbstractArray
+    H::Function
+    G::Function
+    ∂G::Function
+    n_drives::Int
+    levels::Int 
+    params::Dict{Symbol, Any}
+
+    function TimeDependentQuantumSystem end
+
+    function TimeDependentQuantumSystem(
+        H_drift::AbstractMatrix{<:Number},
+        H_drives::Vector{<:AbstractMatrix{<:Number}};
+        carriers::AbstractVector{<:Number}=zeros(length(H_drives)),
+        phases::AbstractVector{<:Number}=zeros(length(H_drives)),
+        params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+    )
+        levels = size(H_drift, 1)
+        H_drift = sparse(H_drift)
+        G_drift = sparse(Isomorphisms.G(H_drift))
+
+        n_drives = length(H_drives)
+        H_drives = sparse.(H_drives)
+        G_drives = sparse.(Isomorphisms.G.(H_drives))
+
+        H = a, t -> H_drift + sum(a * cos(ω * t + ϕ) .* H for (ω, ϕ, H) in zip(carriers, phases, H_drives))
+        G = a, t -> G_drift + sum(a * cos(ω * t + ϕ) .* G for (ω, ϕ, G) in zip(carriers, phases, G_drives))
+
+        function ∂G(a, t)
+            # Preallocate the Jacobian
+            ∂G_ = [zeros(eltype(G_drift), size(G_drift)) for _ in 1:n_drives + 1]
+            for i = 1:n_drives
+                ∂G_[i] = cos(carriers[i] * t + phases[i]) .* G_drives[i]
+            end
+            ∂G_[end] = sum(a * -sin(ω * t + ϕ) .* G for (ω, ϕ, G) in zip(carriers, phases, G_drives))
+            return ∂G_
+        end
+
+        # save carries and phases
+        params[:carriers] = carriers
+        params[:phases] = phases
+
+        return new(
+            H,
+            G,
+            ∂G,
+            n_drives,
+            levels,
+            params
+        )
+    end
+
+    # TODO: other constructors (functional, no drift, no drive)
+
+    # TODO: tests for this constructor
 
 end
 
