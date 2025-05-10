@@ -59,13 +59,13 @@ Embedded operator type to represent an operator embedded in a subspace of a larg
 quantum system.
 
 # Fields
-- `operator::Matrix{ComplexF64}`: Embedded operator of size
+- `operator::Matrix{<:Number}`: Embedded operator of size
     `prod(subsystem_levels) x prod(subsystem_levels)`.
 - `subspace::Vector{Int}`: Indices of the subspace the operator is embedded in.
 - `subsystem_levels::Vector{Int}`: Levels of the subsystems in the composite system.
 """
-struct EmbeddedOperator
-    operator::Matrix{ComplexF64}
+struct EmbeddedOperator{T<:Number}
+    operator::Matrix{T}
     subspace::Vector{Int}
     subsystem_levels::Vector{Int}
 
@@ -76,14 +76,14 @@ struct EmbeddedOperator
     system spanned by the `subsystem_levels`.
     """
     function EmbeddedOperator(
-        subspace_operator::AbstractMatrix{<:Number},
+        subspace_operator::AbstractMatrix{T},
         subspace::AbstractVector{Int},
         subsystem_levels::AbstractVector{Int}
-    )
+    ) where T<:Number
         embedded_operator = embed(
-            Matrix{ComplexF64}(subspace_operator), subspace, prod(subsystem_levels)
+            subspace_operator, subspace, prod(subsystem_levels)
         )
-        return new(embedded_operator, subspace, subsystem_levels)
+        return new{T}(embedded_operator, subspace, subsystem_levels)
     end
 end
 
@@ -194,13 +194,11 @@ embed(
 ) = embed(subspace_operator, embedded_operator.subspace, prod(embedded_operator.subsystem_levels))
 
 """
-    unembed(embedded_op::EmbeddedOperator)::Matrix{ComplexF64}
+    unembed(embedded_op::EmbeddedOperator)
 
 Unembed an embedded operator, returning the original operator.
 """
-unembed(
-    op::EmbeddedOperator
-)::Matrix{ComplexF64} = op.operator[op.subspace, op.subspace]
+unembed(op::EmbeddedOperator) = op.operator[op.subspace, op.subspace]
 
 """
     unembed(op::AbstractMatrix, embedded_op::EmbeddedOperator)
