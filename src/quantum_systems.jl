@@ -4,7 +4,6 @@ export AbstractQuantumSystem
 export QuantumSystem
 export OpenQuantumSystem
 export VariationalQuantumSystem
-export AbstractTimeDependentQuantumSystem
 export TimeDependentQuantumSystem
 
 export get_drift
@@ -64,17 +63,6 @@ function get_drives(sys::AbstractQuantumSystem)
     return [sys.H(I[1:sys.n_drives, i]) - H_drift for i ∈ 1:sys.n_drives]
 end
 
-
-# ----------------------------------------------------------------------------- #
-# AbstractTimeDependentQuantumSystem
-# ----------------------------------------------------------------------------- #
-
-"""
-    AbstractTimeDependentQuantumSystem
-
-Abstract type for defining time dependent systems.
-"""
-abstract type AbstractTimeDependentQuantumSystem end
 
 # ----------------------------------------------------------------------------- #
 # QuantumSystem
@@ -331,7 +319,7 @@ A struct for storing time-dependent quantum dynamics and the appropriate gradien
 - `params::Dict{Symbol, Any}`: A dictionary of parameters.
 
 """
-struct TimeDependentQuantumSystem <: AbstractTimeDependentQuantumSystem
+struct TimeDependentQuantumSystem <: AbstractQuantumSystem
     H::Function
     G::Function
     ∂G::Function
