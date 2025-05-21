@@ -40,7 +40,7 @@ function fidelity(
     ψ::AbstractVector{<:Number}, 
     ψ_goal::AbstractVector{<:Number}
 )
-    return abs(dot(ψ, ψ_goal))^2
+    return abs(ψ'ψ_goal)^2
 end
 
 """
