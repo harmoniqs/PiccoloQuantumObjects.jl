@@ -9,12 +9,11 @@ export TimeDependentQuantumSystem
 """
     TimeDependentQuantumSystem <: AbstractQuantumSystem
 
-A struct for storing time-dependent quantum dynamics and the appropriate gradients.
+A struct for storing time-dependent quantum dynamics.
 
-# Additional fields
-- `H::Function`: The Hamiltonian function with time: a, t -> H(a, t).
-- `G::Function`: The isomorphic generator function with time, a, t -> G(a, t).
-- `∂G::Function`: The generator jacobian function with time, a, t -> ∂G(a, t).
+# Fields
+- `H::Function`: The Hamiltonian function with time: (a, t) -> H(a, t).
+- `G::Function`: The isomorphic generator function with time, (a, t) -> G(a, t).
 - `n_drives::Int`: The number of drives in the system.
 - `levels::Int`: The number of levels in the system.
 - `params::Dict{Symbol, Any}`: A dictionary of parameters.
@@ -27,11 +26,35 @@ struct TimeDependentQuantumSystem{F1<:Function, F2<:Function} <: AbstractQuantum
     levels::Int 
     params::Dict{Symbol, Any}
 
+    """
+        TimeDependentQuantumSystem(
+            H::AbstractMatrix{<:Number}, 
+            H_drives::Vector{<:AbstractMatrix{<:Number}},
+            carriers::Vector{<:Real}, 
+            phases::Vector{<:Real}; 
+            kwargs...
+        )
+        TimeDependentQuantumSystem(
+            H::AbstractMatrix{<:Number}, 
+            H_drives::Vector{<:AbstractMatrix{<:Number}},
+            kwargs...
+        )
+        TimeDependentQuantumSystem(
+            H::Function,
+            n_drives::Int;
+            params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+        )
+
+    Constructs a time-dependent quantum system with the given Hamiltonian, drives,
+    carriers, and phases.
+    """
+    function TimeDependentQuantumSystem end
+
     function TimeDependentQuantumSystem(
         H_drift::AbstractMatrix{<:Number},
         H_drives::Vector{<:AbstractMatrix{<:Number}};
-        carriers::AbstractVector{<:Number}=zeros(length(H_drives)),
-        phases::AbstractVector{<:Number}=zeros(length(H_drives)),
+        carriers::AbstractVector{<:Real}=zeros(length(H_drives)),
+        phases::AbstractVector{<:Real}=zeros(length(H_drives)),
         params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
     )
         levels = size(H_drift, 1)

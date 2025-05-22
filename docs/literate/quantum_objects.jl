@@ -145,7 +145,7 @@ EmbeddedOperator(
 ```
     
 This is a two step process.
-1. The provided subspace operator is [`lift`](@ref)-ed  from the `subsystem_indices` where
+1. The provided subspace operator is [`lift_operator`](@ref)-ed  from the `subsystem_indices` where
     it is defined into the space spanned by the composite system's `subspaces`.
 2. The lifted operator is embedded into the full Hilbert space spanned by the 
     `subsystem_levels`.

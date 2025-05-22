@@ -9,19 +9,13 @@ export VariationalQuantumSystem
 """
     QuantumSystem <: AbstractQuantumSystem
 
-A struct for storing quantum dynamics and the appropriate gradients.
+A struct for storing quantum dynamics.
 
 # Fields
 - `H::Function`: The Hamiltonian function, excluding dissipation: a -> H(a).
 - `G::Function`: The isomorphic generator function, including dissipation, a -> G(a).
 - `levels::Int`: The number of levels in the system.
 - `n_drives::Int`: The number of drives in the system.
-
-# Constructors
-- QuantumSystem(H_drift::AbstractMatrix{<:Number}, H_drives::Vector{<:AbstractMatrix{<:Number}}; kwargs...)
-- QuantumSystem(H_drift::AbstractMatrix{<:Number}; kwargs...)
-- QuantumSystem(H_drives::Vector{<:AbstractMatrix{<:Number}}; kwargs...)
-- QuantumSystem(H::Function, n_drives::Int; kwargs...)
 
 """
 struct QuantumSystem{F1<:Function, F2<:Function} <: AbstractQuantumSystem
@@ -98,28 +92,12 @@ end
 """
     OpenQuantumSystem <: AbstractQuantumSystem
 
-A struct for storing open quantum dynamics and the appropriate gradients.
+A struct for storing open quantum dynamics.
 
 # Additional fields
 - `dissipation_operators::Vector{AbstractMatrix}`: The dissipation operators.
 
 See also [`QuantumSystem`](@ref).
-
-# Constructors
-- OpenQuantumSystem(
-        H_drift::AbstractMatrix{<:Number},
-        H_drives::AbstractVector{<:AbstractMatrix{<:Number}}
-        dissipation_operators::AbstractVector{<:AbstractMatrix{<:Number}};
-        kwargs...
-    )
-- OpenQuantumSystem(
-        H_drift::Matrix{<:Number}, H_drives::AbstractVector{Matrix{<:Number}};
-        dissipation_operators::AbstractVector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[],
-        kwargs...
-    )
-- OpenQuantumSystem(H_drift::Matrix{<:Number}; kwargs...)
-- OpenQuantumSystem(H_drives::Vector{Matrix{<:Number}}; kwargs...)
-- OpenQuantumSystem(H::Function, n_drives::Int; kwargs...)
 
 """
 struct OpenQuantumSystem{F1<:Function, F2<:Function} <: AbstractQuantumSystem
@@ -238,6 +216,17 @@ end
 
 # TODO: Open quantum systems?
 
+"""
+    VariationalQuantumSystem <: AbstractQuantumSystem
+
+A struct for storing variational quantum dynamics.
+
+# Additional fields
+- `G_vars::AbstractVector{<:Function}`: Variational generator functions
+
+See also [`QuantumSystem`](@ref).
+
+"""
 struct VariationalQuantumSystem{F1<:Function, F2<:Function, F⃗3<:AbstractVector{<:Function}} <: AbstractQuantumSystem
     H::F1 
     G::F2
@@ -246,6 +235,29 @@ struct VariationalQuantumSystem{F1<:Function, F2<:Function, F⃗3<:AbstractVecto
     levels::Int 
     params::Dict{Symbol, Any}
 
+    """
+        VariationalQuantumSystem(
+            H_drift::AbstractMatrix{<:Number},
+            H_drives::AbstractVector{<:AbstractMatrix{<:Number}},
+            H_vars::AbstractVector{<:AbstractMatrix{<:Number}};
+            kwargs...
+        )
+        VariationalQuantumSystem(
+            H_drives::AbstractVector{<:AbstractMatrix{<:Number}},
+            H_vars::AbstractVector{<:AbstractMatrix{<:Number}};
+            kwargs...
+        )
+        VariationalQuantumSystem(
+            H::F1,
+            H_vars::F⃗2,
+            n_drives::Int;
+            kwargs...
+        )
+
+    Constructs a `VariationalQuantumSystem` object from the drift and drive Hamiltonian 
+    terms and variational Hamiltonians, for sensitivity and robustness analysis.
+
+    """
     function VariationalQuantumSystem end
 
     function VariationalQuantumSystem(
