@@ -15,7 +15,6 @@ using ..Gates
 using ..Isomorphisms
 using ..QuantumObjectUtils
 using ..QuantumSystems
-using ..CompositeQuantumSystems
 
 using LinearAlgebra
 using TestItems
@@ -150,7 +149,7 @@ function EmbeddedOperator(
     subsystem_levels::AbstractVector{Int}
 )
     @assert length(subsystem_levels) == length(subspaces)
-    lifted_subspace_op = lift(subspace_operator, subsystem_indices, length.(subspaces))
+    lifted_subspace_op = lift_operator(subspace_operator, subsystem_indices, length.(subspaces))
     subspace_indices = get_subspace_indices(subspaces, subsystem_levels)
     return EmbeddedOperator(lifted_subspace_op, subspace_indices, subsystem_levels)
 end
