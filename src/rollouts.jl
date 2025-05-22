@@ -40,7 +40,7 @@ function fidelity(
     ψ::AbstractVector{<:Number}, 
     ψ_goal::AbstractVector{<:Number}
 )
-    return abs(dot(ψ, ψ_goal))^2
+    return abs2(ψ'ψ_goal)
 end
 
 """
@@ -65,7 +65,7 @@ function unitary_fidelity(
     U = U[subspace, subspace]
     U_goal = U_goal[subspace, subspace]
     N = size(U, 1)
-    return abs(tr(U' * U_goal))^2 / N^2
+    return abs2(tr(U' * U_goal)) / N^2
 end
 
 """

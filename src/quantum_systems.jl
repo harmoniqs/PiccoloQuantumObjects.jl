@@ -235,9 +235,12 @@ struct OpenQuantumSystem <: AbstractQuantumSystem
         𝒢_drives = Isomorphisms.G.(Isomorphisms.ad_vec.(H_drives))
 
         if isempty(dissipation_operators)
-            𝒟 = zeros(size(𝒢_drift))
+            𝒟 = spzeros(size(𝒢_drift))
         else
-            𝒟 = sum(Isomorphisms.iso_D(L) for L ∈ sparse.(dissipation_operators))
+            𝒟 = sum(
+                Isomorphisms.iso_D(L) 
+                    for L ∈ sparse.(dissipation_operators)
+            )
         end
 
         if n_drives == 0
