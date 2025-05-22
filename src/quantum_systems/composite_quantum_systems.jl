@@ -98,14 +98,14 @@ end
 A composite quantum system consisting of `subsystems`. Couplings between subsystems can
 be additionally defined. Subsystem drives are always appended to any new coupling drives.
 """
-struct CompositeQuantumSystem{F1<:Function, F2<:Function, Q⃗ <: AbstractVector{<:QuantumSystem}} <: AbstractQuantumSystem
+struct CompositeQuantumSystem{F1<:Function, F2<:Function} <: AbstractQuantumSystem
     H::F1
     G::F2
     n_drives::Int
     levels::Int
     params::Dict{Symbol, Any}
     subsystem_levels::Vector{Int}
-    subsystems::Q⃗
+    subsystems::Vector{QuantumSystem}
 
     function CompositeQuantumSystem(
         H_drift::AbstractMatrix{<:Number},
@@ -140,7 +140,7 @@ struct CompositeQuantumSystem{F1<:Function, F2<:Function, Q⃗ <: AbstractVector
             G = a -> G_drift + sum(a .* G_drives)
         end
 
-        return new{typeof(H), typeof(G), typeof(subsystems)}(
+        return new{typeof(H), typeof(G)}(
             H,
             G,
             n_drives,

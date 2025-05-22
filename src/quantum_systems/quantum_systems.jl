@@ -333,7 +333,7 @@ end
     @test get_drives(system) == H_drives
 end
 
-@testitem "Parametric system creation" begin
+@testitem "System creation with params" begin
     system = QuantumSystem(PAULIS[:Z], [PAULIS[:X]], params=Dict(:a => 1))
     @test system.params[:a] == 1
 
