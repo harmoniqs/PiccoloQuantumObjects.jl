@@ -110,6 +110,40 @@ system.dissipation_operators[2] |> sparse
 
 get_drift(system) |> sparse
 
+#=
+## Time Dependent Quantum Systems
+A [`TimeDependentQuantumSystem`](@ref) is a `QuantumSystem` with time-dependent Hamiltonians.
+```@docs; canonical = false
+TimeDependentQuantumSystem
+```
+
+A function `H(a, t)` or carrier and phase kwargs are used to specify time-dependent drives,
+```math
+    H(a, t) = H_{\text{drift}} + \sum_i a_i \cos(\omega_i t + \phi_i) H_{\text{drives}}^{(i)}
+```
+=#
+# _Create a time-dependent Hamiltonian with a time-dependent drive._
+H(a, t) = PAULIS.Z + a[1] * cos(t) * PAULIS.X
+system = TimeDependentQuantumSystem(H, 1)
+
+# _The drift Hamiltonian is the Z operator, but its now a function of time!_
+get_drift(system)(0.0) |> sparse
+
+# _The drive Hamiltonian is the X operator, but its now a function of time!_
+get_drives(system)[1](0.0) |> sparse
+
+# _Change the time to π._
+get_drives(system)[1](π) |> sparse
+
+# _Similar matrix constructors exist, but with carrier and phase kwargs._
+system = TimeDependentQuantumSystem(PAULIS.Z, [PAULIS.X], carriers=[1.0], phases=[0.0])
+
+# _This is the same as before, t=0.0:_
+get_drives(system)[1](0.0) |> sparse
+
+# _and at π:_
+get_drives(system)[1](π) |> sparse
+
 
 #=
 ## Composite quantum systems
@@ -137,23 +171,23 @@ drives[1] |> sparse
 drives[2] |> sparse
 
 #=
-### The `lift` function
+### The `lift_operator` function
 
-To lift operators acting on a subsystem into the full Hilbert space, use [`lift`](@ref).
+To lift operators acting on a subsystem into the full Hilbert space, use [`lift_operator`](@ref).
 ```@docs; canonical = false
-lift
+lift_operator
 ```
 =#
 
 # _Create an `a + a'` operator acting on the 1st subsystem of a qutrit and qubit system._
 subspace_levels = [3, 2]
-lift(create(3) + annihilate(3), 1, subspace_levels) .|> real |> sparse
+lift_operator(create(3) + annihilate(3), 1, subspace_levels) .|> real |> sparse
 
 # _Create IXI operator on the 2nd qubit in a 3-qubit system._
-lift(PAULIS[:X], 2, 3) .|> real |> sparse
+lift_operator(PAULIS[:X], 2, 3) .|> real |> sparse
 
 # _Create an XX operator acting on qubits 3 and 4 in a 4-qubit system._
-lift([PAULIS[:X], PAULIS[:X]], [3, 4], 4) .|> real |> sparse
+lift_operator([PAULIS[:X], PAULIS[:X]], [3, 4], 4) .|> real |> sparse
 
 #=
 We can also lift an operator that entangles different subspaces by passing the indices
@@ -161,11 +195,11 @@ of the entangled subsystems.
 =#
 
 #_Here's another way to create an XX operator acting on qubits 3 and 4 in a 4-qubit system._
-lift(kron(PAULIS[:X], PAULIS[:X]), [3, 4], 4) .|> real |> sparse
+lift_operator(kron(PAULIS[:X], PAULIS[:X]), [3, 4], 4) .|> real |> sparse
 
 # _Lift a CX gate acting on the 1st and 3rd qubits in a 3-qubit system._
 # _The result is independent of the state of the second qubit._
-lift(GATES[:CX], [1, 3], 3) .|> real |> sparse
+lift_operator(GATES[:CX], [1, 3], 3) .|> real |> sparse
 
 
 #=
