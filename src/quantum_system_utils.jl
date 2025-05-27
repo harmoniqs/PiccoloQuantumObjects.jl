@@ -16,9 +16,15 @@ commutator(A::AbstractMatrix{<:Number}, B::AbstractMatrix{<:Number}) = A * B - B
 
 is_hermitian(H::AbstractMatrix{<:Number}; atol=eps(Float32)) = all(isapprox.(H - H', 0.0, atol=atol))
 
-is_linearly_dependent(basis::Vector{<:AbstractMatrix{<:Number}}; kwargs...) =
-    is_linearly_dependent(stack(vec.(basis)); kwargs...)
+# ----------------------------------------------------------------------------- #
+# Linear independence
+# ----------------------------------------------------------------------------- #
 
+"""
+    is_linearly_dependent(M::AbstractMatrix; eps=eps(Float32), verbose=true)
+
+Check if the columns of the matrix `M` are linearly dependent.
+"""
 function is_linearly_dependent(M::AbstractMatrix; eps=eps(Float32), verbose=true)
     if size(M, 2) > size(M, 1)
         if verbose
@@ -30,6 +36,9 @@ function is_linearly_dependent(M::AbstractMatrix; eps=eps(Float32), verbose=true
     val = minimum(abs.(diag(qr(M).R)))
     return isapprox(val, 0.0, atol=eps)
 end
+
+is_linearly_dependent(basis::Vector{<:AbstractMatrix{<:Number}}; kwargs...) =
+    is_linearly_dependent(stack(vec.(basis)); kwargs...)
 
 function linearly_independent_indices(
     basis::Vector{<:AbstractMatrix{<:Number}};
@@ -57,7 +66,16 @@ function linearly_independent_subset!(basis::Vector{<:AbstractMatrix}; kwargs...
     return nothing
 end
 
+# ----------------------------------------------------------------------------- #
+# Operator algebra
+# ----------------------------------------------------------------------------- #
+
 traceless(M::AbstractMatrix) = M - tr(M) * I / size(M, 1)
+
+function clean(M::AbstractMatrix; normalize::Bool=true, remove_trace::Bool=true)
+    M_ = remove_trace ? traceless(M) : M
+    return normalize && norm(M_) > 0 ? M_ / norm(M_) : M_
+end
 
 """
     operator_algebra(generators; kwargs...)
@@ -72,95 +90,94 @@ Compute the Lie algebra basis for the given `generators`.
 - `normalize::Bool=false`: normalize the basis
 - `verbose::Bool=false`: print information
 - `remove_trace::Bool=true`: remove trace from generators
-
 """
 function operator_algebra(
     generators::Vector{<:AbstractMatrix{T}};
-    return_layers=false,
-    normalize=false,
-    verbose=false,
-    remove_trace=true
+    return_layers::Bool=false,
+    remove_trace::Bool=true,
+    normalize::Bool=true,
+    verbose::Bool=false,
+    atol::Float64=1e-10,
 ) where T <: Number
-    # Initialize basis (traceless, normalized)
-    basis = normalize ? [g / norm(g) for g ∈ generators] : deepcopy(generators)
-    if remove_trace
-        @. basis = traceless(basis)
-    end
+    N = size(first(generators), 1)
+    max_dim = N^2 - 1
 
-    # Initialize layers
-    current_layer = deepcopy(basis)
-    if return_layers
-        all_layers = Vector{Matrix{T}}[deepcopy(basis)]
-    end
+    # Initialize orthonormal basis of vectorized operators (Gram-Schmidt)
+    q_basis = Matrix{T}(undef, N^2, 0)
+    basis = Matrix{T}[]
+    current_layer = Matrix{T}[]
 
-    subspace_termination = false
-
-    ℓ = 1
-    if verbose
-        print("operator algebra depth = [")
-        print("$(ℓ)")
-    end
-    if is_linearly_dependent(basis)
-        println("Linearly dependent generators.")
-    else
-        # Note: Use left normalized commutators
-        # Note: Jacobi identity is not checked
-        need_basis = true
-        algebra_dim = size(first(generators), 1)^2 - 1
-        while need_basis
-            layer = Matrix{T}[]
-            # Repeat commutators until no new operators are found
-            for op ∈ current_layer
-                for gen ∈ generators
-                    if !need_basis
-                        continue
-                    end
-
-                    test = commutator(gen, op)
-                    if all(test .≈ 0)
-                        continue
-                    # Current basis is assumed to be linearly independent
-                    elseif is_linearly_dependent([basis..., test], verbose=verbose)
-                        continue
-                    else
-                        test .= is_hermitian(test) ? test : im * test
-                        test .= normalize ? test / norm(test) : test
-                        push!(basis, test)
-                        push!(layer, test)
-                        need_basis = length(basis) < algebra_dim ? true : false
-                    end
-                end
-            end
-
-            if isempty(layer)
-                if verbose
-                    println(" Subspace termination.]")
-                end
-                subspace_termination = true
-                break
-            else
-                current_layer = layer
-                ℓ += 1
-                if verbose
-                    print(" $(ℓ)")
-                end
-            end
-
-            if return_layers
-                append!(all_layers, [current_layer])
+    # Prepare initial generators
+    for g in generators
+        M = clean(g, normalize=normalize, remove_trace=remove_trace)
+        v = vec(M)
+        if size(q_basis, 2) == 0
+            q_basis = reshape(v / norm(v), :, 1)
+            push!(basis, M)
+            push!(current_layer, M)
+        else
+            proj = q_basis * (q_basis' * v)
+            residual = v - proj
+            rnorm = norm(residual)
+            if rnorm > atol
+                q_basis = hcat(q_basis, residual / rnorm)
+                push!(basis, M)
+                push!(current_layer, M)
             end
         end
     end
 
-    if verbose && !subspace_termination
+    if verbose
+        print("operator algebra depth = [1")
+    end
+
+    all_layers = return_layers ? [copy(current_layer)] : nothing
+    layer_count = 1
+
+    while !isempty(current_layer) && length(basis) < max_dim
+        next_layer = Matrix{T}[]
+
+        for A in current_layer, B in basis
+            comm = commutator(A, B)
+
+            if all(comm .≈ 0)
+                continue
+            end
+
+            comm = is_hermitian(comm) ? comm : im * comm
+            comm = clean(comm, normalize=normalize, remove_trace=remove_trace)
+
+            v = vec(comm)
+            proj = q_basis * (q_basis' * v)
+            residual = v - proj
+            rnorm = norm(residual)
+
+            if rnorm > atol
+                q_basis = hcat(q_basis, residual / rnorm)
+                push!(basis, comm)
+                push!(next_layer, comm)
+            end
+        end
+
+        if isempty(next_layer)
+            break
+        end
+
+        current_layer = next_layer
+        layer_count += 1
+        if verbose
+            print(" $layer_count")
+        end
+        if return_layers
+            push!(all_layers, copy(current_layer))
+        end
+    end
+
+    if verbose
         println("]")
     end
 
-    if return_layers
-        return basis, all_layers
-    else
-        return basis
-    end
+    return return_layers ? (basis, all_layers) : basis
 end
 
 function fit_gen_to_basis(
@@ -193,7 +210,7 @@ function is_in_span(
 end
 
 # ----------------------------------------------------------------------------- #
-#                            Reachability                                       #
+# Reachability
 # ----------------------------------------------------------------------------- #
 
 """
@@ -294,10 +311,17 @@ is_reachable(gate::EmbeddedOperator, args...; kwargs...) =
     basis = operator_algebra(gen, verbose=false)
     @test length(basis) == size(first(gen), 1)^2-1
 
-    # Check 2 qubit with linearly dependent basis
-    gen = operator_from_string.(["XX", "YY", "XI", "XI", "IY", "IX"])
+    # Check 2 qubit linearly dependent
+    res = ["XX", "XI"]
+    gen = operator_from_string.(["XX", "XX", "XI", "XI",])
     basis = operator_algebra(gen, verbose=false)
-    @test length(basis) == length(gen)
+    @test length(basis) == length(res)
+
+    # Check 2 qubit with linearly dependent basis
+    res = ["XX", "YY", "XI", "IX", "ZY", "YZ", "ZZ"]
+    gen = operator_from_string.(["XX", "YY", "XI", "XI", "IX"])
+    basis = operator_algebra(gen, verbose=false)
+    length(basis) == length(res)
 
     # Check 2 qubit with pair of 1-qubit subspaces
     gen = operator_from_string.(["XI", "YI", "IY", "IX"])
