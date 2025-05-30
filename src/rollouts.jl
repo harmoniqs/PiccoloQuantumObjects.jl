@@ -914,7 +914,8 @@ end
 
     include("../test/test_utils.jl")
 
-    traj = named_trajectory_type_1()
+    traj1 = named_trajectory_type_1()
+    traj2 = named_trajectory_type_2()
     sys = QuantumSystem([PAULIS.X, PAULIS.Y])
     U_goal = GATES.H
     embedded_U_goal = EmbeddedOperator(U_goal, sys)
@@ -924,8 +925,8 @@ end
     ψ̃ = ket_to_iso(ψ)
     ψ̃_goal = ket_to_iso(ψ_goal)
 
-    as = traj.a
-    Δts = get_timesteps(traj)
+    as = traj1.a
+    Δts = get_timesteps(traj1)
 
     # Default integrator
     # State fidelity
@@ -933,16 +934,16 @@ end
 
     # Unitary fidelity
     @test unitary_rollout_fidelity(U_goal, as, Δts, sys) > 0
-    @test unitary_rollout_fidelity(traj, sys) > 0
+    @test unitary_rollout_fidelity(traj1, sys) > 0
     @test unitary_rollout_fidelity(embedded_U_goal, as, Δts, sys) > 0
 
     # Free phase unitary
-    @test unitary_rollout_fidelity(traj, sys;
+    @test unitary_rollout_fidelity(traj1, sys;
         phases=[0.0], phase_operators=Matrix{ComplexF64}[PAULIS[:Z]]
     ) > 0
 
     # Free phase unitary
-    @test unitary_rollout_fidelity(traj, sys;
+    @test unitary_rollout_fidelity(traj1, sys;
         phases=[0.0],
         phase_operators=[PAULIS[:Z]]
     ) > 0
@@ -953,7 +954,7 @@ end
 
     # Unitary fidelity
     @test unitary_rollout_fidelity(U_goal, as, Δts, sys, integrator=expv) > 0
-    @test unitary_rollout_fidelity(traj, sys, integrator=expv) > 0
+    @test unitary_rollout_fidelity(traj1, sys, integrator=expv) > 0
     @test unitary_rollout_fidelity(embedded_U_goal, as, Δts, sys, integrator=expv) > 0
 
     # Exp explicit
@@ -962,8 +963,11 @@ end
 
     # Unitary fidelity
     @test unitary_rollout_fidelity(U_goal, as, Δts, sys, integrator=exp) > 0
-    @test unitary_rollout_fidelity(traj, sys, integrator=exp) > 0
+    @test unitary_rollout_fidelity(traj1, sys, integrator=exp) > 0
     @test unitary_rollout_fidelity(embedded_U_goal, as, Δts, sys, integrator=exp) > 0
+
+    # State fidelity with NamedTrajectory
+    @test rollout_fidelity(traj, sys, integrator=exp) ≈ [0.999993696878333, 0.9999936968783332]
 
     # Bad integrator
     @test_throws ErrorException unitary_rollout_fidelity(U_goal, as, Δts, sys, integrator=(a,b) -> 1) > 0
