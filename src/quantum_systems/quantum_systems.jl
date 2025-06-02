@@ -322,6 +322,24 @@ end
 
 # ******************************************************************************* #
 
+@testitem "Test system show methods" begin
+    function showtest(x)
+        sprint() do io
+            Base.show(IOContext(io), MIME"text/plain"(), x)
+        end
+    end
+
+    H_drift = PAULIS[:Z]
+    H_drives = [PAULIS[:X], PAULIS[:Y]]
+    n_drives = length(H_drives)
+
+    system = QuantumSystem(H_drift, H_drives)
+    @test showtest(system) == "QuantumSystem: levels = 2, n_drives = 2"
+
+    open_system = OpenQuantumSystem(PAULIS[:Z], [PAULIS[:X]], params=Dict(:a => 1))
+    @test showtest(open_system) == "OpenQuantumSystem: levels = 2, n_drives = 1"
+end
+
 @testitem "System creation" begin
     H_drift = PAULIS[:Z]
     H_drives = [PAULIS[:X], PAULIS[:Y]]

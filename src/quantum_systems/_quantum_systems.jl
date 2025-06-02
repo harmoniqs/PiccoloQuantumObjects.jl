@@ -46,7 +46,7 @@ function get_drives(sys::AbstractQuantumSystem)
     return [sys.H(I[1:sys.n_drives, i]) - H_drift for i ∈ 1:sys.n_drives]
 end
 
-function Base.show(io::IO, sys::AbstractQuantumSystem)
+function Base.show(io::IO, ::MIME"text/plain", sys::AbstractQuantumSystem)
     print(io, "$(nameof(typeof(sys))): levels = $(sys.levels), n_drives = $(sys.n_drives)")
 end
 
