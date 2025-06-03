@@ -128,7 +128,7 @@ function operator_algebra(
     end
 
     if verbose
-        print("operator algebra depth = [1")
+        print("operator algebra depth = 1")
     end
 
     all_layers = return_layers ? [copy(current_layer)] : nothing
