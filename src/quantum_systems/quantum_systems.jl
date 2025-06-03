@@ -371,6 +371,13 @@ end
     @test open_system.params[:a] == 1
 end
 
+@testitem "OpenQuantumSystem creation with QuantumSystem" begin
+    system = QuantumSystem(PAULIS[:Z], [PAULIS[:X]])
+    open_system = OpenQuantumSystem(system)
+    @test open_system.levels == 2
+    @test open_system.n_drives == 1
+end
+
 @testitem "No drift system creation" begin
     H_drift = zeros(2, 2)
     H_drives = [PAULIS[:X], PAULIS[:Y]]

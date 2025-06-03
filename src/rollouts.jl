@@ -970,7 +970,7 @@ end
     @test rollout_fidelity(traj2, sys, integrator=exp) ≈ [0.999993696878333, 0.9999936968783332]
 
     # Bad integrator
-    @test_throws ErrorException unitary_rollout_fidelity(U_goal, as, Δts, sys, integrator=(a,b) -> 1) > 0
+    @test_throws ErrorException unitary_rollout_fidelity(U_goal, as, Δts, sys, integrator=(a,b) -> 1)
 end
 
 @testitem "Foward diff rollout" begin

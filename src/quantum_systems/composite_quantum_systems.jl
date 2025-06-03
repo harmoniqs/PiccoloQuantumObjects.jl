@@ -132,13 +132,9 @@ struct CompositeQuantumSystem{F1<:Function, F2<:Function} <: AbstractQuantumSyst
         H_drives = sparse.(H_drives)
         G_drives = sparse.(Isomorphisms.G.(H_drives))
 
-        if n_drives == 0
-            H = a -> H_drift
-            G = a -> Isomorphisms.G(H_drift)
-        else
-            H = a -> H_drift + sum(a .* H_drives)
-            G = a -> G_drift + sum(a .* G_drives)
-        end
+        # At least provide one drive
+        H = a -> H_drift + sum(a .* H_drives)
+        G = a -> G_drift + sum(a .* G_drives)
 
         return new{typeof(H), typeof(G)}(
             H,
@@ -262,7 +258,8 @@ end
     @test csys.n_drives == 1 + sum([sys.n_drives for sys ∈ subsystems])
     @test csys.subsystems == subsystems
     @test csys.subsystem_levels == subsystem_levels
-    @test get_drift(csys) ≈ g12 + lift_operator(kron(PAULIS[:Z], PAULIS[:Z]), 1, subsystem_levels)end
+    @test get_drift(csys) ≈ g12 + lift_operator(kron(PAULIS[:Z], PAULIS[:Z]), 1, subsystem_levels)
+end
 
 @testitem "Composite system from drift" begin
     using LinearAlgebra
