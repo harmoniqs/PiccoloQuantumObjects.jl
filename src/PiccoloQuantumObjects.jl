@@ -11,11 +11,8 @@ include("quantum_object_utils.jl")
 include("isomorphisms.jl")
 @reexport using .Isomorphisms
 
-include("quantum_systems.jl")
+include("quantum_systems/_quantum_systems.jl")
 @reexport using .QuantumSystems
-
-include("composite_quantum_systems.jl")
-@reexport using .CompositeQuantumSystems
 
 include("embedded_operators.jl")
 @reexport using .EmbeddedOperators

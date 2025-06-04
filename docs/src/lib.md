@@ -7,11 +7,6 @@ CollapsedDocStrings = true
 Modules = [PiccoloQuantumObjects.QuantumSystems]
 ```
 
-## Composite Quantum Systems
-```@autodocs
-Modules = [PiccoloQuantumObjects.CompositeQuantumSystems]
-```
-
 ## Gates
 ```@autodocs
 Modules = [PiccoloQuantumObjects.Gates]

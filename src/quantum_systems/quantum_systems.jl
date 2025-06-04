@@ -1,62 +1,6 @@
-module QuantumSystems
-
-export AbstractQuantumSystem
 export QuantumSystem
 export OpenQuantumSystem
 export VariationalQuantumSystem
-
-export get_drift
-export get_drives
-
-using ..Isomorphisms
-using ..QuantumObjectUtils
-
-using LinearAlgebra
-using SparseArrays
-using TestItems
-using ForwardDiff
-
-function generator_jacobian(G::Function)
-    return function ∂G(a::AbstractVector{Float64})
-        ∂G⃗ = ForwardDiff.jacobian(a_ -> vec(G(a_)), a)
-        dim = Int(sqrt(size(∂G⃗, 1)))
-        return [reshape(∂G⃗ⱼ, dim, dim) for ∂G⃗ⱼ ∈ eachcol(∂G⃗)]
-    end
-end
-
-# ----------------------------------------------------------------------------- #
-# AbstractQuantumSystem
-# ----------------------------------------------------------------------------- #
-
-"""
-    AbstractQuantumSystem
-
-Abstract type for defining systems.
-"""
-abstract type AbstractQuantumSystem end
-
-# ----------------------------------------------------------------------------- #
-# AbstractQuantumSystem methods
-# ----------------------------------------------------------------------------- #
-
-"""
-    get_drift(sys::AbstractQuantumSystem)
-
-Returns the drift Hamiltonian of the system.
-"""
-get_drift(sys::AbstractQuantumSystem) = sys.H(zeros(sys.n_drives))
-
-"""
-    get_drives(sys::AbstractQuantumSystem)
-
-Returns the drive Hamiltonians of the system.
-"""
-function get_drives(sys::AbstractQuantumSystem)
-    H_drift = get_drift(sys)
-    # Basis vectors for controls will extract drive operators
-    return [sys.H(I[1:sys.n_drives, i]) - H_drift for i ∈ 1:sys.n_drives]
-end
-
 
 # ----------------------------------------------------------------------------- #
 # QuantumSystem
@@ -65,26 +9,18 @@ end
 """
     QuantumSystem <: AbstractQuantumSystem
 
-A struct for storing quantum dynamics and the appropriate gradients.
+A struct for storing quantum dynamics.
 
 # Fields
 - `H::Function`: The Hamiltonian function, excluding dissipation: a -> H(a).
 - `G::Function`: The isomorphic generator function, including dissipation, a -> G(a).
-- `∂G::Function`: The generator jacobian function, a -> ∂G(a).
 - `levels::Int`: The number of levels in the system.
 - `n_drives::Int`: The number of drives in the system.
 
-# Constructors
-- QuantumSystem(H_drift::AbstractMatrix{<:Number}, H_drives::Vector{<:AbstractMatrix{<:Number}}; kwargs...)
-- QuantumSystem(H_drift::AbstractMatrix{<:Number}; kwargs...)
-- QuantumSystem(H_drives::Vector{<:AbstractMatrix{<:Number}}; kwargs...)
-- QuantumSystem(H::Function, n_drives::Int; kwargs...)
-
 """
-struct QuantumSystem <: AbstractQuantumSystem
-    H::Function
-    G::Function
-    ∂G::Function
+struct QuantumSystem{F1<:Function, F2<:Function} <: AbstractQuantumSystem
+    H::F1
+    G::F2
     n_drives::Int
     levels::Int
     params::Dict{Symbol, Any}
@@ -115,17 +51,14 @@ struct QuantumSystem <: AbstractQuantumSystem
         if n_drives == 0
             H = a -> H_drift
             G = a -> G_drift
-            ∂G = a -> 0
         else
             H = a -> H_drift + sum(a .* H_drives)
             G = a -> G_drift + sum(a .* G_drives)
-            ∂G = a -> G_drives
         end
 
-        return new(
+        return new{typeof(H), typeof(G)}(
             H,
             G,
-            ∂G,
             n_drives,
             levels,
             params
@@ -141,14 +74,13 @@ struct QuantumSystem <: AbstractQuantumSystem
         QuantumSystem(H_drift, Matrix{ℂ}[]; kwargs...)
 
     function QuantumSystem(
-        H::Function, 
+        H::F, 
         n_drives::Int; 
         params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
-    )
+    ) where F <: Function
         G = a -> Isomorphisms.G(sparse(H(a)))
-        ∂G = generator_jacobian(G)
         levels = size(H(zeros(n_drives)), 1)
-        return new(H, G, ∂G, n_drives, levels, params)
+        return new{F, typeof(G)}(H, G, n_drives, levels, params)
     end
 
 end
@@ -160,34 +92,17 @@ end
 """
     OpenQuantumSystem <: AbstractQuantumSystem
 
-A struct for storing open quantum dynamics and the appropriate gradients.
+A struct for storing open quantum dynamics.
 
 # Additional fields
 - `dissipation_operators::Vector{AbstractMatrix}`: The dissipation operators.
 
 See also [`QuantumSystem`](@ref).
 
-# Constructors
-- OpenQuantumSystem(
-        H_drift::AbstractMatrix{<:Number},
-        H_drives::AbstractVector{<:AbstractMatrix{<:Number}}
-        dissipation_operators::AbstractVector{<:AbstractMatrix{<:Number}};
-        kwargs...
-    )
-- OpenQuantumSystem(
-        H_drift::Matrix{<:Number}, H_drives::AbstractVector{Matrix{<:Number}};
-        dissipation_operators::AbstractVector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[],
-        kwargs...
-    )
-- OpenQuantumSystem(H_drift::Matrix{<:Number}; kwargs...)
-- OpenQuantumSystem(H_drives::Vector{Matrix{<:Number}}; kwargs...)
-- OpenQuantumSystem(H::Function, n_drives::Int; kwargs...)
-
 """
-struct OpenQuantumSystem <: AbstractQuantumSystem
-    H::Function
-    𝒢::Function
-    ∂𝒢::Function
+struct OpenQuantumSystem{F1<:Function, F2<:Function} <: AbstractQuantumSystem
+    H::F1
+    𝒢::F2
     n_drives::Int
     levels::Int
     dissipation_operators::Vector{Matrix{ComplexF64}}
@@ -201,7 +116,8 @@ struct OpenQuantumSystem <: AbstractQuantumSystem
         kwargs...
     )
     OpenQuantumSystem(
-        H_drift::Matrix{<:Number}, H_drives::AbstractVector{Matrix{<:Number}};
+        H_drift::Matrix{<:Number}, 
+        H_drives::AbstractVector{Matrix{<:Number}};
         dissipation_operators::AbstractVector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[],
         kwargs...
     )
@@ -229,25 +145,25 @@ struct OpenQuantumSystem <: AbstractQuantumSystem
         𝒢_drives = Isomorphisms.G.(Isomorphisms.ad_vec.(H_drives))
 
         if isempty(dissipation_operators)
-            𝒟 = zeros(size(𝒢_drift))
+            𝒟 = spzeros(size(𝒢_drift))
         else
-            𝒟 = sum(Isomorphisms.iso_D(L) for L ∈ sparse.(dissipation_operators))
+            𝒟 = sum(
+                Isomorphisms.iso_D(L) 
+                    for L ∈ sparse.(dissipation_operators)
+            )
         end
 
         if n_drives == 0
             H = a -> H_drift
             𝒢 = a -> 𝒢_drift + 𝒟
-            ∂𝒢 = a -> 0
         else
             H = a -> H_drift + sum(a .* H_drives)
             𝒢 = a -> 𝒢_drift + sum(a .* 𝒢_drives) + 𝒟
-            ∂𝒢 = a -> 𝒢_drives
         end
 
-        return new(
+        return new{typeof(H), typeof(𝒢)}(
             H,
             𝒢,
-            ∂𝒢,
             n_drives,
             levels,
             dissipation_operators,
@@ -279,14 +195,13 @@ struct OpenQuantumSystem <: AbstractQuantumSystem
         OpenQuantumSystem(H_drift, Matrix{T}[]; kwargs...)
 
     function OpenQuantumSystem(
-        H::Function, n_drives::Int;
+        H::F, n_drives::Int;
         dissipation_operators::AbstractVector{<:AbstractMatrix{ℂ}}=Matrix{ComplexF64}[],
         params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
-    ) where ℂ <: Number
+    ) where {F <: Function, ℂ <: Number}
         G = a -> Isomorphisms.G(Isomorphisms.ad_vec(sparse(H(a))))
-        ∂G = generator_jacobian(G)
         levels = size(H(zeros(n_drives)), 1)
-        return new(H, G, ∂G, n_drives, levels, dissipation_operators, params)
+        return new{F, typeof(G)}(H, G, n_drives, levels, dissipation_operators, params)
     end
 
     OpenQuantumSystem(system::QuantumSystem; kwargs...) = OpenQuantumSystem(
@@ -301,16 +216,48 @@ end
 
 # TODO: Open quantum systems?
 
-struct VariationalQuantumSystem <: AbstractQuantumSystem
-    H::Function 
-    G::Function
-    ∂G::Function
-    G_vars::Vector{Function}
-    ∂G_vars::Vector{Function}
+"""
+    VariationalQuantumSystem <: AbstractQuantumSystem
+
+A struct for storing variational quantum dynamics.
+
+# Additional fields
+- `G_vars::AbstractVector{<:Function}`: Variational generator functions
+
+See also [`QuantumSystem`](@ref).
+
+"""
+struct VariationalQuantumSystem{F1<:Function, F2<:Function, F⃗3<:AbstractVector{<:Function}} <: AbstractQuantumSystem
+    H::F1 
+    G::F2
+    G_vars::F⃗3
     n_drives::Int 
     levels::Int 
     params::Dict{Symbol, Any}
 
+    """
+        VariationalQuantumSystem(
+            H_drift::AbstractMatrix{<:Number},
+            H_drives::AbstractVector{<:AbstractMatrix{<:Number}},
+            H_vars::AbstractVector{<:AbstractMatrix{<:Number}};
+            kwargs...
+        )
+        VariationalQuantumSystem(
+            H_drives::AbstractVector{<:AbstractMatrix{<:Number}},
+            H_vars::AbstractVector{<:AbstractMatrix{<:Number}};
+            kwargs...
+        )
+        VariationalQuantumSystem(
+            H::F1,
+            H_vars::F⃗2,
+            n_drives::Int;
+            kwargs...
+        )
+
+    Constructs a `VariationalQuantumSystem` object from the drift and drive Hamiltonian 
+    terms and variational Hamiltonians, for sensitivity and robustness analysis.
+
+    """
     function VariationalQuantumSystem end
 
     function VariationalQuantumSystem(
@@ -334,16 +281,14 @@ struct VariationalQuantumSystem <: AbstractQuantumSystem
         if n_drives == 0
             H = a -> H_drift
             G = a -> G_drift
-            ∂G = a -> 0
-            ∂G_vars = [a -> 0 for G in G_vars]
         else
             H = a -> H_drift + sum(a .* H_drives)
             G = a -> G_drift + sum(a .* G_drives)
-            ∂G = a -> G_drives
-            ∂G_vars = [a -> [spzeros(size(G)) for G in G_drives] for G in G_vars]
         end
 
-        return new(H, G, ∂G, G_vars, ∂G_vars, n_drives, levels, params)
+        return new{typeof(H), typeof(G), typeof(G_vars)}(
+            H, G, G_vars, n_drives, levels, params
+        )
     end
 
     function VariationalQuantumSystem(
@@ -362,23 +307,20 @@ struct VariationalQuantumSystem <: AbstractQuantumSystem
     end
 
     function VariationalQuantumSystem(
-        H::Function,
-        H_vars::AbstractVector{<:Function},
+        H::F1,
+        H_vars::F⃗2,
         n_drives::Int; 
         params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
-    )
+    ) where {F1 <: Function, F⃗2 <: AbstractVector{<:Function}}
         @assert !isempty(H_vars) "At least one variational operator is required"
         G = a -> Isomorphisms.G(sparse(H(a)))
-        ∂G = generator_jacobian(G)
         G_vars = Function[a -> Isomorphisms.G(sparse(H_v(a))) for H_v in H_vars]
-        ∂G_vars = Function[generator_jacobian(G_v) for G_v in G_vars]
         levels = size(H(zeros(n_drives)), 1)
-        return new(H, G, ∂G, G_vars, ∂G_vars, n_drives, levels, params)
+        return new{F1, typeof(G), F⃗2}(H, G, G_vars, n_drives, levels, params)
     end
 end
 
-#***********************************************************************************************#
-
+# ******************************************************************************* #
 
 @testitem "System creation" begin
     H_drift = PAULIS[:Z]
@@ -389,12 +331,6 @@ end
     @test system isa QuantumSystem
     @test get_drift(system) == H_drift
     @test get_drives(system) == H_drives
-
-    # test jacobians
-    a = randn(n_drives)
-    ∂G = system.∂G(a)
-    @test length(∂G) == system.n_drives
-    @test all(∂G .≈ QuantumSystems.generator_jacobian(system.G)(a))
 
     # repeat with a bigger system
     H_drift = kron(PAULIS[:Z], PAULIS[:Z])
@@ -407,15 +343,9 @@ end
     @test system isa QuantumSystem
     @test get_drift(system) == H_drift
     @test get_drives(system) == H_drives
-
-    # test jacobians
-    a = randn(n_drives)
-    ∂G = system.∂G(a)
-    @test length(∂G) == system.n_drives
-    @test all(∂G .≈ QuantumSystems.generator_jacobian(system.G)(a))
 end
 
-@testitem "Parametric system creation" begin
+@testitem "System creation with params" begin
     system = QuantumSystem(PAULIS[:Z], [PAULIS[:X]], params=Dict(:a => 1))
     @test system.params[:a] == 1
 
@@ -453,11 +383,6 @@ end
     @test get_drift(system) == PAULIS[:Z]
     @test get_drives(system) == [PAULIS[:X]]
 
-    # test jacobians
-    compare = QuantumSystem(PAULIS[:Z], [PAULIS[:X]])
-    a = randn(system.n_drives)
-    @test system.∂G(a) == compare.∂G(a)
-
     # test three drives
     system = QuantumSystem(
         a -> a[1] * PAULIS[:X] + a[2] * PAULIS[:Y] + a[3] * PAULIS[:Z], 3
@@ -483,13 +408,6 @@ end
     # test dissipation
     𝒢_drift = Isomorphisms.G(Isomorphisms.ad_vec(H_drift))
     @test system.𝒢(zeros(system.n_drives)) != 𝒢_drift
-
-    # test jacobians (disspiation is constant)
-    a = randn(system.n_drives)
-    ∂𝒢 = system.∂𝒢(a)
-    @test length(∂𝒢) == system.n_drives
-    @test all(∂𝒢 .≈ QuantumSystems.generator_jacobian(system.𝒢)(a))
-
 end
 
 @testitem "Open system alternate constructors" begin
@@ -551,7 +469,6 @@ end
     G_X = Isomorphisms.G(PAULIS.X)
     G_Y = Isomorphisms.G(PAULIS.Y)
     G = a[1] * G_X + a[2] * G_Y
-    ∂G_vars = [zeros(size(G_X)), zeros(size(G_Y))]
     for varsys in [varsys1, varsys2]
         @assert varsys isa VariationalQuantumSystem
         @assert varsys.n_drives == 2
@@ -559,8 +476,6 @@ end
         @assert varsys.G(a) ≈ G
         @assert varsys.G_vars[1](a) ≈ G_X
         @assert varsys.G_vars[2](a) ≈ G_Y
-        @assert varsys.∂G_vars[1](a) ≈ ∂G_vars
-        @assert varsys.∂G_vars[2](a) ≈ ∂G_vars
     end
 
     # single sensitivity
@@ -573,7 +488,6 @@ end
     @assert length(varsys.G_vars) == 1
     @assert varsys.G(a) ≈ G
     @assert varsys.G_vars[1](a) ≈ G_X
-    @assert varsys.∂G_vars[1](a) ≈ ∂G_vars
 
     # functional sensitivity
     varsys = VariationalQuantumSystem(
@@ -587,27 +501,4 @@ end
     @assert varsys.G(a) ≈ G
     @assert varsys.G_vars[1](a) ≈ a[1] * G_X
     @assert varsys.G_vars[2](a) ≈ G_Y
-    @assert varsys.∂G_vars[1](a) ≈ [G_X, zeros(size(G_Y))]
-    @assert varsys.∂G_vars[2](a) ≈ ∂G_vars
-
-end
-
-@testitem "Generator jacobian types" begin
-    GX = Isomorphisms.G(PAULIS.X)
-    GY = Isomorphisms.G(PAULIS.Y)
-    GZ = Isomorphisms.G(PAULIS.Z)
-    G(a) = GX + a[1] * GY + a[2] * GZ
-    ∂G = QuantumSystems.generator_jacobian(G)
-
-    traj_a = randn(Float64, 2, 3)
-    a₀ = traj_a[:, 1]
-    aᵥ = @views traj_a[:, 1]
-
-    @test ∂G(a₀) isa AbstractVector{<:AbstractMatrix{Float64}}
-    @test ∂G(a₀)[1] isa AbstractMatrix
-
-    @test ∂G(aᵥ) isa AbstractVector{<:AbstractMatrix{Float64}}
-    @test ∂G(aᵥ)[1] isa AbstractMatrix{Float64}
-end
-
 end
