@@ -15,6 +15,7 @@ using ..Gates
 using LinearAlgebra
 using TestItems
 
+function QobjEvo end
 
 @doc raw"""
     operator_from_string(operator::String; lookup=PAULIS)
