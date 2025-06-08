@@ -1,8 +1,10 @@
 @testitem "QobjEvo tests" begin
+    using QuantumCollocation: UnitarySmoothPulseProblem, UnitaryInfidelityObjective, UnitaryIntegrator
+    using DirectTrajOpt: DirectTrajOptProblem
     using QuantumToolbox
-    using QuantumToolbox:  Qobj, length, size, basis, destroy, sigmaz, sigmax, expect, mesolve, sesolve
+    using QuantumToolbox: QobjEvo, basis, destroy, sigmaz, sigmax, expect, mesolve, sesolve
     using PiccoloQuantumObjects
-    using PiccoloQuantumObjects: get_drift, get_drives
+    using PiccoloQuantumObjects: get_drift, get_drives, QuantumSystem
     using NamedTrajectories
     using NamedTrajectories: get_times
     using Interpolations
@@ -167,7 +169,7 @@
         Δt_se = 0.05
         times_se_expected = collect(0.0:Δt_se:(T_se-1)*Δt_se)
         a_values_se = reshape(sin.(times_se_expected * π / times_se_expected[end]), 1, :)
-        prob_se = UnitarySmoothPulseProblem(sys_se, Piccolo.GATES.X, T_se, Δt_se; a_bound=1.0, dda_bound=1.0)
+        prob_se = UnitarySmoothPulseProblem(sys_se, GATES.X, T_se, Δt_se; a_bound=1.0, dda_bound=1.0)
         solve!(prob_se; max_iter=10)
         traj_se = prob_se.trajectory
         a_idx_range_se = traj_se.components.a

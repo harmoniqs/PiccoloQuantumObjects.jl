@@ -1,11 +1,11 @@
 module PQOQuantumToolboxExt
 
 using QuantumToolbox
-import QuantumToolbox: Qobj, length, size, QuantumObjectEvolution
+import QuantumToolbox: Qobj, length, size, QuantumObjectEvolution, QobjEvo
 import PiccoloQuantumObjects
-import PiccoloQuantumObjects: get_drift, get_drives, QobjEvo
+import PiccoloQuantumObjects: get_drift, get_drives, QuantumSystem
 import NamedTrajectories
-import NamedTrajectories: get_times
+import NamedTrajectories: get_times, NamedTrajectory
 import Interpolations
 import Interpolations: LinearInterpolation
 import LinearAlgebra
@@ -23,7 +23,7 @@ and ``a_j(t)`` are the time-dependent control amplitudes for each drive, obtaine
 The time-dependent coefficient functions for `QobjEvo` are constructed by *linearly interpolating* the
 control amplitudes from `traj.a` across the `get_times(traj)` time points using `Interpolations.jl`.
 """
-function PiccoloQuantumObjects.QobjEvo(sys::QuantumSystem, traj::NamedTrajectory)
+function QuantumToolbox.QobjEvo(sys::QuantumSystem, traj::NamedTrajectory)
     H_drift_matrix = get_drift(sys)
     H_drives_matrices = get_drives(sys)
     H0_qobj = Qobj(H_drift_matrix)
