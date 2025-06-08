@@ -34,6 +34,54 @@
         @test isapprox_qobj(H_evo1(t_interp1), Qobj(H_drift_test1 + expected_a_interp1 * H_drives_test1[1]))
     end
 
+    @testset "sesolve using DirectTrajOptProblem for state transfer" begin
+        H_drift_dt = 0.05 * PAULIS.Z
+        H_drives_dt = [PAULIS.X]
+        sys_dt = QuantumSystem(H_drift_dt, H_drives_dt)
+        dim = size(H_drift_dt, 1)
+        num_drives = length(H_drives_dt)
+        T_intervals = 50
+        Δt_init = 0.1
+        prob_baseline = UnitarySmoothPulseProblem(
+            sys_dt, GATES.X, T_intervals, Δt_init;
+            a_bound=1.0, dda_bound=1.0
+        )
+        solve!(prob_baseline; max_iter=1)
+        traj_dt_base = prob_baseline.trajectory
+        amplitude_values = reshape(
+            sin.(collect(0.0:Δt_init:(T_intervals-1)*Δt_init) * 2π / (T_intervals*Δt_init)),
+            num_drives, :
+        )
+        a_idx_range = traj_dt_base.components.a
+        traj_dt_base.data[a_idx_range, :] = amplitude_values
+        unitary_state_symbol = nothing
+        for s in keys(traj_dt_base.components)
+            if startswith(string(s), "Ũ")
+                unitary_state_symbol = s
+                break
+            end
+        end
+        obj_dt = UnitaryInfidelityObjective(GATES.X, unitary_state_symbol, traj_dt_base)
+        integrator_dt = UnitaryIntegrator(sys_dt, traj_dt_base, unitary_state_symbol, :a)
+        prob_direct = DirectTrajOptProblem(
+            traj_dt_base,
+            obj_dt,
+            integrator_dt
+        )
+        solve!(prob_direct; max_iter=1)
+        optimized_traj_dt = prob_direct.trajectory
+        H_evo_dt = QobjEvo(sys_dt, optimized_traj_dt)
+        times_dt = get_times(optimized_traj_dt)
+        ψ0_dt = basis(dim, 0)
+        sol_dt = sesolve(H_evo_dt, ψ0_dt, times_dt; progress_bar=Val(false), saveat=times_dt)
+        @test length(sol_dt.states) == length(times_dt)
+        @test isapprox(norm(sol_dt.states[1]), 1.0, atol=1e-6)
+        @test isapprox(norm(sol_dt.states[end]), 1.0, atol=1e-6)
+        initial_expect_z_dt = real(expect(sigmaz(), ψ0_dt))
+        final_expect_z_dt = real(expect(sigmaz(), sol_dt.states[end]))
+        @test !isapprox(initial_expect_z_dt, final_expect_z_dt, atol=1e-3) || (length(times_dt) <= 1)
+    end
+
     @testset "using mesolve" begin
         H_drift_ms = 0.1 * PAULIS.Z
         H_drives_ms = [PAULIS.X]

@@ -2,8 +2,8 @@ module PQOQuantumToolboxExt
 
 using QuantumToolbox
 import QuantumToolbox: Qobj, length, size, QuantumObjectEvolution
-import PiccolouantumObjects
-import PiccolouantumObjects: get_drift, get_drives, QobjEvo
+import PiccoloQuantumObjects
+import PiccoloQuantumObjects: get_drift, get_drives, QobjEvo
 import NamedTrajectories
 import NamedTrajectories: get_times
 import Interpolations
