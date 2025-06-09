@@ -41,5 +41,4 @@ function QuantumToolbox.QobjEvo(sys::QuantumSystem, traj::NamedTrajectory)
     end
     return QuantumToolbox.QuantumObjectEvolution(Tuple(qobj_evo_components))
 end
-
 end
