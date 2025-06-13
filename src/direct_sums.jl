@@ -6,6 +6,7 @@ using SparseArrays
 using TestItems
 
 using ..QuantumSystems
+using ..Isomorphisms
 
 
 """
@@ -81,6 +82,12 @@ direct_sum(systems::AbstractVector{<:QuantumSystem}) = reduce(direct_sum, system
 
 # *************************************************************************** #
 
+@testitem "Test vector direct sum" begin
+    A = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+    B = [0, 1, 0, 1, 1, 0, -1, 0]
+    @test direct_sum(A, B) == [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, -1, 0]
+end
+
 @testitem "Test matrix direct sum" begin
     using SparseArrays
     A = [1 2; 3 4]
@@ -90,6 +97,17 @@ direct_sum(systems::AbstractVector{<:QuantumSystem}) = reduce(direct_sum, system
     A = sparse([1 2; 3 4])
     B = sparse([5 6; 7 8])
     @test direct_sum(A, B) == sparse([1 2 0 0; 3 4 0 0; 0 0 5 6; 0 0 7 8])
+end
+
+@testitem "Test vector of quantum system direct sum" begin
+    sys1 = QuantumSystem([1 2; 3 4])
+    sys2 = QuantumSystem([5 6; 7 8])
+    sys = direct_sum([sys1, sys2])
+    @test sys.H(0) == [1 2 0 0; 3 4 0 0; 0 0 5 6; 0 0 7 8]
+    @test sys.n_drives == 0
+    # created new keys for the direct sum
+    @test sys.params[:system_1] == Dict()
+    @test sys.params[:system_2] == Dict()
 end
 
 @testitem "Test quantum system direct sum" begin
@@ -108,6 +126,24 @@ end
     @test sys.H(0) == [1 2 0 0; 3 4 0 0; 0 0 5 6; 0 0 7 8]
     @test sys.n_drives == 0
     @test sys.params == Dict{Symbol, Dict{Symbol, Any}}(:system_1 => Dict(:a => 1), :system_2 => Dict(:b => 2))
+end
+
+@testitem "Test quantum system with params" begin
+    sys1 = QuantumSystem([1 2; 3 4], params=Dict(:system_1 => Dict(:a => 1)))
+    sys2 = QuantumSystem([5 6; 7 8])
+    sys = direct_sum(sys1, sys2)
+    @test sys.H(0) == [1 2 0 0; 3 4 0 0; 0 0 5 6; 0 0 7 8]
+    @test sys.n_drives == 0
+    @test sys.params[:system_1] == Dict(:a=>1)
+    @test sys.params[:system_2] == Dict()
+
+    sys1 = QuantumSystem([1 2; 3 4])
+    sys2 = QuantumSystem([5 6; 7 8], params=Dict(:system_1 => Dict(:a => 1)))
+    sys = direct_sum(sys1, sys2)
+    @test sys.H(0) == [1 2 0 0; 3 4 0 0; 0 0 5 6; 0 0 7 8]
+    @test sys.n_drives == 0
+    @test sys.params[:system_1] == Dict()
+    @test sys.params[:system_2] == Dict(:a=>1)
 end
 
 end
