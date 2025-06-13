@@ -12,31 +12,31 @@
     end
 
     @testset "QuantumSystem Time Evolution" begin
-           H_drift = 1.0 * PAULIS[:Z]
-           H_drives = [1.0 * PAULIS[:X], 1.0 * PAULIS[:Y]]
-           sys = QuantumSystem(H_drift, H_drives)
-           T = 100
-           Δt = 0.05
-           times = range(0, (T-1)*Δt, length=T)
-           a_vals = Matrix{Float64}(undef, 2, T)
-           a_vals[1,:] = 1.0 * sin.(2π * times / times[end])
-           a_vals[2,:] = 1.0 * cos.(2π * times / times[end])
-           traj = NamedTrajectory(
-               (a = a_vals, Δt = fill(Δt, 1, T)),
-               timestep=:Δt,
-               controls=:a
-           )
-           H_evo = QobjEvo(sys, traj)
-           ψ0 = basis(2, 0)
-           sol = sesolve(H_evo, ψ0, get_times(traj))
-           @test length(sol.states) == T
-           @test isapprox(norm(ψ0), 1.0, atol=1e-6)
-           @test isapprox(norm(sol.states[end]), 1.0, atol=1e-6)
-           initial_z = expect(sigmaz(), ψ0)
-           final_z = expect(sigmaz(), sol.states[end])
-           z_change = abs(initial_z - final_z)
-           @test z_change > 0.02 || isapprox(z_change, 0.0, atol=0.02)
-       end
+        H_drift = 1.0 * PAULIS[:Z]
+        H_drives = [1.0 * PAULIS[:X], 1.0 * PAULIS[:Y]]
+        sys = QuantumSystem(H_drift, H_drives)
+        T = 100
+        Δt = 0.05
+        times = range(0, (T-1)*Δt, length=T)
+        a_vals = Matrix{Float64}(undef, 2, T)
+        a_vals[1,:] = 1.0 * sin.(2π * times / times[end])
+        a_vals[2,:] = 1.0 * cos.(2π * times / times[end])
+        traj = NamedTrajectory(
+            (a = a_vals, Δt = fill(Δt, 1, T)),
+            timestep=:Δt,
+            controls=:a
+        )
+        H_evo = QobjEvo(sys, traj)
+        ψ0 = basis(2, 0)
+        sol = sesolve(H_evo, ψ0, get_times(traj))
+        @test length(sol.states) == T
+        @test isapprox(norm(ψ0), 1.0, atol=1e-6)
+        @test isapprox(norm(sol.states[end]), 1.0, atol=1e-6)
+        initial_z = expect(sigmaz(), ψ0)
+        final_z = expect(sigmaz(), sol.states[end])
+        z_change = abs(initial_z - final_z)
+        @test z_change > 0.02 || isapprox(z_change, 0.0, atol=0.02)
+    end
 
     @testset "OpenQuantumSystem Time Evolution" begin
         H_drift = 0.5 * PAULIS[:Z]
@@ -76,14 +76,14 @@
             (a = a_vals, Δt = fill(Δt, 1, T)),
             timestep=:Δt,
             controls=:a
-         )
-         H_evo = QobjEvo(sys, traj)
-         times = get_times(traj)
-         @test isapprox_qobj(H_evo(times[1]), Qobj(H_drift + a_vals[1,1] * H_drives[1]))
-         @test isapprox_qobj(H_evo(times[3]), Qobj(H_drift + a_vals[1,3] * H_drives[1]))
-         t_mid = times[2] - 0.01*Δt
-         @test isapprox_qobj(H_evo(t_mid), Qobj(H_drift + a_vals[1,1] * H_drives[1]))
-     end
+        )
+        H_evo = QobjEvo(sys, traj)
+        times = get_times(traj)
+        @test isapprox_qobj(H_evo(times[1]), Qobj(H_drift + a_vals[1,1] * H_drives[1]))
+        @test isapprox_qobj(H_evo(times[3]), Qobj(H_drift + a_vals[1,3] * H_drives[1]))
+        t_mid = times[2] - 0.01*Δt
+        @test isapprox_qobj(H_evo(t_mid), Qobj(H_drift + a_vals[1,1] * H_drives[1]))
+    end
 
     @testset "QuantumSystem: State transfer with sesolve" begin
         H_drift = 0.05 * PAULIS[:Z]
@@ -181,7 +181,7 @@
         @test isapprox_qobj(H_evo(times[end]), Qobj(a_vals[1,end] * H_drives[1]))
     end
 
-    @testset "sesolve integration (closed system)" begin
+    @testset "QuantumSystem: sesolve integration" begin
         H_drift = 0.01 * PAULIS[:Z]
         H_drives = [PAULIS[:X]]
         sys = QuantumSystem(H_drift, H_drives)
