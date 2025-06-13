@@ -4,7 +4,7 @@ using QuantumToolbox
 import QuantumToolbox: QobjEvo
 using PiccoloQuantumObjects
 using NamedTrajectories
-import LinearAlgebra
+using LinearAlgebra
 
 function _zoh(times::AbstractVector{<:Real}, amps::AbstractVector{<:Number})
     isempty(times) && throw(ArgumentError("Time points cannot be empty"))

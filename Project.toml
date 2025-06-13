@@ -21,13 +21,11 @@ QuantumToolbox = "6c2fb7c5-b903-41d2-bc5e-5a7c320b9fab"
 PQOQuantumToolboxExt = ["QuantumToolbox"]
 
 [compat]
-DirectTrajOpt = "0.2"
 ExponentialAction = "0.2"
 ForwardDiff = "0.10, 1.0"
 LinearAlgebra = "1.10, 1.11"
 NamedTrajectories = "0.3"
 ProgressMeter = "1.10"
-QuantumCollocation = "0.7"
 Reexport = "1.2"
 SparseArrays = "1.10, 1.11"
 TestItemRunner = "1.1"
@@ -35,10 +33,8 @@ TestItems = "1.0"
 julia = "1.10, 1.11"
 
 [extras]
-DirectTrajOpt = "c823fa1f-8872-4af5-b810-2b9b72bbbf56"
 QuantumToolbox = "6c2fb7c5-b903-41d2-bc5e-5a7c320b9fab"
-QuantumCollocation = "0dc23a59-5ffb-49af-b6bd-932a8ae77adf"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["DirectTrajOpt", "QuantumCollocation", "QuantumToolbox", "Test"]
+test = ["QuantumToolbox", "Test"]
