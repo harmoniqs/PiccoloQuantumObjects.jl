@@ -13,6 +13,42 @@
         return qobj1.type == qobj2.type && qobj1.dims == qobj2.dims && isapprox(qobj1.data, qobj2.data; kwargs...)
     end
 
+    @testset "QuantumSystem's QobjEvo Conversion" begin
+        H_drift = 0.5 * PAULIS[:Z]
+        H_drives = [PAULIS[:X]]
+        sys = QuantumSystem(H_drift, H_drives)
+        T = 10
+        Δt = 0.1
+        a_vals = Matrix{Float64}(undef, 1, T)
+        a_vals[1,:] = 0.1 * sin.(range(0, 2π, length=T))
+        traj = NamedTrajectory((a = a_vals, Δt = fill(Δt, 1, T)), timestep=:Δt, controls=:a)
+        H_evo = QobjEvo(sys, traj)
+        @test isapprox_qobj(H_evo(get_times(traj)[1]), Qobj(H_drift + a_vals[1,1] * H_drives[1]))
+        H_drives_multi = [PAULIS[:X], PAULIS[:Y]]
+        sys_multi = QuantumSystem(H_drift, H_drives_multi)
+        a_vals_multi = Matrix{Float64}(undef, 2, T)
+        a_vals_multi[1,:] = 0.1 * sin.(range(0, 2π, length=T))
+        a_vals_multi[2,:] = 0.2 * cos.(range(0, 2π, length=T))
+        traj_multi = NamedTrajectory((a = a_vals_multi, Δt = fill(Δt, 1, T)), timestep=:Δt, controls=:a)
+        H_evo_multi = QobjEvo(sys_multi, traj_multi)
+        @test H_evo_multi isa QobjEvo
+    end
+
+    @testset "OpenQuantumSystem's QobjEvo Conversion" begin
+        H_drift = 0.5 * PAULIS[:Z]
+        H_drives = [PAULIS[:X]]
+        diss_ops = [sqrt(0.1)*PAULIS[:Z], sqrt(0.05)*PAULIS[:X]]
+        sys = OpenQuantumSystem(H_drift, H_drives, diss_ops)
+        T = 10
+        Δt = 0.1
+        a_vals = zeros(1, T)
+        a_vals[1,:] = 0.1 * sin.(range(0, 2π, length=T))
+        traj = NamedTrajectory((a = a_vals, Δt = fill(Δt, 1, T)), timestep=:Δt, controls=:a)
+        H_evo, c_ops = QobjEvo(sys, traj)
+        @test H_evo isa QobjEvo
+        @test all(isapprox_qobj.(c_ops, Qobj.(diss_ops)))
+    end
+
     @testset "Quantum System: Single drive, basic amplitudes" begin
         H_drift = 0.5 * PAULIS.Z
         H_drives = [PAULIS.X]
