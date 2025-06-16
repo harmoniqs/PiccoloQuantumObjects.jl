@@ -261,6 +261,7 @@ end
 Convert a ket to a Bloch vector representation.
 """
 function ket_to_bloch(ψ::AbstractVector{<:Number})
+    @assert length(ψ) == 2
     ρ = ψ * ψ'
     bloch_vector =  [real(tr(ρ * P)) for P in [PAULIS.X, PAULIS.Y, PAULIS.Z]]
 
@@ -273,19 +274,15 @@ end
 
 Convert a Bloch vector to a ket (up to global phase).
 """
-function bloch_to_ket(bloch::AbstractVector{<:Number}; digits::Integer=6)
-    x, y, z = bloch  # extract bloch vector components
+function bloch_to_ket(bloch::AbstractVector{R}; digits::Integer=6) where R <: Real
+    @assert length(bloch) == 3 
+    x, y, z = bloch
     
-    # compute angles
-    θ = acos(z)  # polar angle
-    φ = atan(y, x)  # azimuthal angle
+    θ = acos(z)
+    φ = atan(y, x)
 
-    # construct the quantum state
-    ket = [cos(θ/2), exp(im * φ) * sin(θ/2)]
+    return Complex{R}[cos(θ/2), exp(im * φ) * sin(θ/2)]
 
-    ket = map(c -> round(real(c), digits=digits) + (isreal(c) ? 0.0 : im * round(imag(c), digits=digits)), ket)
-
-    return ket
 end
 # *************************************************************************** #
 
