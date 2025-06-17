@@ -24,11 +24,12 @@ using ..Isomorphisms
 using ..DirectSums
 
 using NamedTrajectories
+
 using ExponentialAction
+using ForwardDiff
 using LinearAlgebra
 using ProgressMeter
 using TestItems
-using ForwardDiff
 
 
 """
