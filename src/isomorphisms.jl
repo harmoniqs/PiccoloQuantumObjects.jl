@@ -263,6 +263,11 @@ Convert a ket to a Bloch vector representation.
 function ket_to_bloch(ψ::AbstractVector{<:Number})
     @assert length(ψ) == 2
     ρ = ψ * ψ'
+    PAULIS = (
+        X = [0 1; 1 0],
+        Y = [0 -im; im 0],
+        Z = [1 0; 0 -1],
+        )
     bloch_vector =  [real(tr(ρ * P)) for P in [PAULIS.X, PAULIS.Y, PAULIS.Z]]
 
     return bloch_vector / norm(bloch_vector)
@@ -390,7 +395,8 @@ end
 end
 
 @testitem "Test Bloch vector to ket and ket to Bloch vector" begin
-    using PiccoloQuantumObjects.Isomorphisms: ket_to_bloch, bloch_to_ket
+    using LinearAlgebra: dot
+    using PiccoloQuantumObjects: Isomorphisms.ket_to_bloch, Isomorphisms.bloch_to_ket
 
     ψ₁ = [1.0, 0.0]
     ψ₂ = [0.0, 1.0]
