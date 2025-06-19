@@ -4,6 +4,7 @@ export AbstractQuantumSystem
 
 export get_drift
 export get_drives
+export get_c_ops
 
 using ..Isomorphisms
 using ..QuantumObjectUtils
@@ -50,6 +51,11 @@ function Base.show(io::IO, sys::AbstractQuantumSystem)
     print(io, "$(nameof(typeof(sys))): levels = $(sys.levels), n_drives = $(sys.n_drives)")
 end
 
+# ----------------------------------------------------------------------------- #
+# Quantum Toolbox ext
+# ----------------------------------------------------------------------------- #
+
+function get_c_ops end
 
 # ----------------------------------------------------------------------------- #
 # Quantum System Types
