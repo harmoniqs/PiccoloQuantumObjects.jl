@@ -49,7 +49,7 @@ function show_diffs(A::AbstractMatrix, B::AbstractMatrix; atol=0)
 end
 
 
-function named_trajectory_type_1(; free_time=false)
+function named_trajectory_type_1()
     # Hadamard gate, two dda controls (random), Δt = 0.2
     data = [
         1.0          0.957107     0.853553     0.75         0.707107;
@@ -69,35 +69,20 @@ function named_trajectory_type_1(; free_time=false)
         0.2          0.2          0.2          0.2          0.2
     ]
 
-    if free_time
-        components = (
-            Ũ⃗ = data[1:8, :],
-            a = data[9:10, :],
-            da = data[11:12, :],
-            dda = data[13:14, :],
-            Δt = data[15:15, :]
-        )
-        controls = (:dda, :Δt)
-        timestep = :Δt
-        bounds = (
-            a = ([-1.0, -1.0], [1.0, 1.0]),
-            dda = ([-1.0, -1.0], [1.0, 1.0]),
-            Δt = ([0.1], [0.30000000000000004])
-        )
-    else
-        components = (
-            Ũ⃗ = data[1:8, :],
-            a = data[9:10, :],
-            da = data[11:12, :],
-            dda = data[13:14, :]
-        )
-        controls = (:dda,)
-        timestep = 0.2
-        bounds = (
-            a = ([-1.0, -1.0], [1.0, 1.0]),
-            dda = ([-1.0, -1.0], [1.0, 1.0]),
-        )
-    end
+    components = (
+        Ũ⃗ = data[1:8, :],
+        a = data[9:10, :],
+        da = data[11:12, :],
+        dda = data[13:14, :],
+        Δt = data[15:15, :]
+    )
+    controls = (:dda, :Δt)
+    timestep = :Δt
+    bounds = (
+        a = ([-1.0, -1.0], [1.0, 1.0]),
+        dda = ([-1.0, -1.0], [1.0, 1.0]),
+        Δt = ([0.1], [0.30000000000000004])
+    )
 
     initial = (
         Ũ⃗ = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
