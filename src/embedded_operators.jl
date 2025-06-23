@@ -387,7 +387,8 @@ function get_iso_vec_leakage_indices end
 function get_iso_vec_leakage_indices(
     subspace::AbstractVector{Int},
     levels::Int;
-    ignore_pure_leakage::Bool=true
+    ignore_pure_leakage::Bool=true,
+    ignore_seepage::Bool=false
 )
     leakage = get_leakage_indices(subspace, levels)
     iso_leakage_indices = Int[]
@@ -396,7 +397,7 @@ function get_iso_vec_leakage_indices(
 
     for j ∈ 1:levels
         # Real
-        if j ∈ leakage
+        if !ignore_seepage && j ∈ leakage
             # (subspace, leakage) x leakage
             for i ∈ rows
                 push!(iso_leakage_indices, 2levels * (j - 1) + i)
@@ -409,7 +410,7 @@ function get_iso_vec_leakage_indices(
         end
 
         # Imaginary
-        if j ∈ leakage
+        if !ignore_seepage && j ∈ leakage
             for i ∈ rows
                 push!(iso_leakage_indices, 2levels * (j - 1) + i + levels)
             end
