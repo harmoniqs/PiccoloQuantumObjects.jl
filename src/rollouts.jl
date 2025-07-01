@@ -58,6 +58,7 @@ end
 
 Calculate the fidelity between unitary operators `U` and `U_goal` in the `subspace`.
 """
+# TODO: this should assert that U and U_goal are the same size
 function unitary_fidelity(
     U::AbstractMatrix{<:Number},
     U_goal::AbstractMatrix{<:Number};

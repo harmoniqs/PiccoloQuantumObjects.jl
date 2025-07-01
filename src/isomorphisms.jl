@@ -148,6 +148,66 @@ Returns the density matrix `ρ` from its isomorphism `ρ⃗̃`
 """
 iso_vec_to_density(ρ⃗̃::AbstractVector{<:Real}) = mat(iso_to_ket(ρ⃗̃))
 
+function density_to_iso(ρ::AbstractMatrix{<:ComplexF64})
+    n = size(ρ, 1)
+    ρ̃ᵣ = Vector{Float64}(undef, (n * (n + 1)) ÷ 2)
+    ρ̃ᵢ = Vector{Float64}(undef, (n * (n - 1)) ÷ 2)
+
+    kᵣ = 1
+    @inbounds for i in 1:n
+        for j in i:n
+            ρ̃ᵣ[kᵣ] = real(ρ[i, j])
+            kᵣ += 1
+        end
+    end
+
+    kᵢ = 1
+    @inbounds for i in 2:n
+        for j in 1:i-1
+            ρ̃ᵢ[kᵢ] = imag(ρ[i, j])
+            kᵢ += 1
+        end
+    end
+
+    return vcat(ρ̃ᵣ, ρ̃ᵢ)
+end
+
+function iso_to_density(ρ̃::AbstractVector{<:Real})
+    L = length(ρ̃)
+    n = Int(sqrt(L))
+    @assert n^2 == L "Length of vector must be a perfect square."
+
+    lenᵣ = (n * (n + 1)) ÷ 2
+    ρ̃ᵣ = @view ρ̃[1:lenᵣ]
+    ρ̃ᵢ = @view ρ̃[lenᵣ + 1:end]
+
+    ρ = Matrix{ComplexF64}(undef, n, n)
+
+    kᵣ = 1
+    @inbounds for i in 1:n
+        for j in i:n
+            val = ρ̃ᵣ[kᵣ]
+            ρ[i, j] = val
+            ρ[j, i] = val
+            kᵣ += 1
+        end
+    end
+
+    kᵢ = 1
+    @inbounds for i in 2:n
+        for j in 1:i-1
+            imval = ρ̃ᵢ[kᵢ]
+            ρ[i, j] += im * imval
+            ρ[j, i] -= im * imval
+            kᵢ += 1
+        end
+    end
+
+    return ρ
+end
+
+
+
 # ----------------------------------------------------------------------------- #
 #                             Hamiltonians                                      #
 # ----------------------------------------------------------------------------- #
