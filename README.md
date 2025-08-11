@@ -103,7 +103,7 @@ julia --project=docs docs/make.jl
 or editing the docs live:
 ```
 julia --project=docs
-> using LiveServer, Piccolo, Revise
+> using LiveServer, PiccoloQuantumObjects, Revise
 > servedocs(literate_dir="docs/literate", skip_dirs=["docs/src/generated", "docs/src/assets/"], skip_files=["docs/src/index.md"])
 ```
 
@@ -115,7 +115,7 @@ To prevent this, ensure all generated files are included in the skip dirs or ski
 For example, if we forget index.md like so:
 ```
 julia --project=docs
-> using LiveServer, Piccolo, Revise
+> using LiveServer, PiccoloQuantumObjects, Revise
 > servedocs(literate_dir="docs/literate", skip_dirs=["docs/src/generated", "docs/src/assets/"])
 ```
 it will not build and serve.
