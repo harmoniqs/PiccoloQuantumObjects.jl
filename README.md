@@ -119,3 +119,7 @@ julia --project=docs
 > servedocs(literate_dir="docs/literate", skip_dirs=["docs/src/generated", "docs/src/assets/"])
 ```
 it will not build and serve.
+
+-----
+
+*"It seems that perfection is attained not when there is nothing more to add, but when there is nothing more to take away." - Antoine de Saint-Exupéry*
