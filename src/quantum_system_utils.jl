@@ -336,12 +336,12 @@ end
     @test is_reachable(target, gen, compute_basis=true, verbose=false)
 
     # System
-    sys = QuantumSystem([PAULIS[:X], PAULIS[:Y], PAULIS[:Z]])
+    sys = QuantumSystem([PAULIS[:X], PAULIS[:Y], PAULIS[:Z]], 1.0, [(-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0)])
     target = PAULIS[:Z]
     @test is_reachable(target, sys, verbose=false)
 
     # System with drift
-    sys = QuantumSystem(PAULIS[:Z], [PAULIS[:X]])
+    sys = QuantumSystem(PAULIS[:Z], [PAULIS[:X]], 1.0, [(-1.0, 1.0)])
     target = PAULIS[:Z]
     @test is_reachable(target, sys, verbose=false)
 end
@@ -382,8 +382,8 @@ end
     @test is_reachable(XI, incomplete_gen, verbose=false)
 
     # QuantumSystems
-    complete_gen_sys = QuantumSystem(complete_gen)
-    incomplete_gen_sys = QuantumSystem(incomplete_gen)
+    complete_gen_sys = QuantumSystem(complete_gen, 1.0, fill((-1.0, 1.0), length(complete_gen)))
+    incomplete_gen_sys = QuantumSystem(incomplete_gen, 1.0, fill((-1.0, 1.0), length(incomplete_gen)))
     # Pass
     @test is_reachable(R2, complete_gen_sys, verbose=false)
     @test is_reachable(CZ, complete_gen_sys, verbose=false)
@@ -404,7 +404,7 @@ end
     @test is_reachable(target, gen, verbose=false)
 
     # System
-    sys = QuantumSystem([GATES[:X], GATES[:Y]])
+    sys = QuantumSystem([GATES[:X], GATES[:Y]], 1.0, [(-1.0, 1.0), (-1.0, 1.0)])
     @test is_reachable(target, sys, verbose=false)
 end
 

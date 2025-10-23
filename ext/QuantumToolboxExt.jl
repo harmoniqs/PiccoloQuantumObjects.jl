@@ -71,10 +71,10 @@ get_c_ops(sys::OpenQuantumSystem) = Qobj.(sys.dissipation_operators)
     # X gate
     traj = named_trajectory_type_2()
 
-    sys = QuantumSystem([PAULIS.X, PAULIS.Y])
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], 3.92, [(-1.0, 1.0), (-1.0, 1.0)])
 
     open_sys = OpenQuantumSystem(
-        [PAULIS.X, PAULIS.Y], dissipation_operators=[annihilate(2)]
+        [PAULIS.X, PAULIS.Y], 1.0, [1.0, 1.0], dissipation_operators=[annihilate(2)]
     )
 
     ψ0 = Qobj([1; 0])
