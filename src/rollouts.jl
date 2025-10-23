@@ -187,10 +187,12 @@ function rollout(
 
     Ψ̃[:, 1] .= ψ̃_init
 
+    ts = cumsum([0.0; Δt[1:end-1]])
+
     p = Progress(T-1; enabled=show_progress)
     for t = 2:T
         aₜ₋₁ = controls[:, t - 1]
-        Gₜ = system.G(aₜ₋₁)
+        Gₜ = system.G(aₜ₋₁, ts[t - 1])
         if exp_vector_product
             Ψ̃[:, t] .= integrator(Δt[t - 1], Gₜ, Ψ̃[:, t - 1])
         else
@@ -488,10 +490,12 @@ function unitary_rollout(
 
     Ũ⃗[:, 1] .= Ũ⃗_init
 
+    ts = cumsum([0.0; Δt[1:end-1]])
+
     p = Progress(T-1; enabled=show_progress)
     for t = 2:T
         aₜ₋₁ = controls[:, t - 1]
-        Gₜ = system.G(aₜ₋₁)
+        Gₜ = system.G(aₜ₋₁, ts[t - 1])
         Ũₜ₋₁ = iso_vec_to_iso_operator(Ũ⃗[:, t - 1])
         if exp_vector_product
             Ũₜ = integrator(Δt[t - 1], Gₜ, Ũₜ₋₁)
@@ -916,7 +920,7 @@ end
     include("../test/test_utils.jl")
 
     traj = named_trajectory_type_1()
-    sys = QuantumSystem([PAULIS.X, PAULIS.Y])
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], 1.0, [(-1.0, 1.0), (-1.0, 1.0)])
     U_goal = GATES.H
     embedded_U_goal = EmbeddedOperator(U_goal, sys)
 
@@ -974,7 +978,7 @@ end
     using ForwardDiff
     using ExponentialAction
 
-    sys = QuantumSystem([PAULIS.X, PAULIS.Y])
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], 10.2, [(-1.0, 1.0), (-1.0, 1.0)])
     T = 51
     Δt = 0.2
     ts = fill(Δt, T)
@@ -991,7 +995,7 @@ end
     result2 = ForwardDiff.jacobian(
         as -> unitary_rollout(as, ts, sys, integrator=expv)[:, end], as
     )
-    iso_vec_dim = length(operator_to_iso_vec(sys.H(zeros(sys.n_drives))))
+    iso_vec_dim = length(operator_to_iso_vec(sys.H(zeros(sys.n_drives), 0.0)))
     @test size(result2) == (iso_vec_dim, T * sys.n_drives)
 
     # Time derivatives
@@ -1005,13 +1009,13 @@ end
     result2 = ForwardDiff.jacobian(
         ts -> unitary_rollout(as, ts, sys, integrator=expv)[:, end], ts
     )
-    iso_vec_dim = length(operator_to_iso_vec(sys.H(zeros(sys.n_drives))))
+    iso_vec_dim = length(operator_to_iso_vec(sys.H(zeros(sys.n_drives), 0.0)))
     @test size(result2) == (iso_vec_dim, T)
 end
 
 @testitem "Test variational rollouts" begin
     include("../test/test_utils.jl")
-    sys = QuantumSystem([PAULIS.X, PAULIS.Y])
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], 3.92, [(-1.0, 1.0), (-1.0, 1.0)])
     varsys1 = VariationalQuantumSystem([PAULIS.X, PAULIS.Y], [PAULIS.X])
     varsys2 = VariationalQuantumSystem([PAULIS.X, PAULIS.Y], [PAULIS.X, PAULIS.Y])
     U_goal = GATES.H
