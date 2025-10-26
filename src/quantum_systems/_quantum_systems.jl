@@ -34,7 +34,7 @@ abstract type AbstractQuantumSystem end
 
 Returns the drift Hamiltonian of the system.
 """
-get_drift(sys::AbstractQuantumSystem) = sys.H(zeros(sys.n_drives))
+get_drift(sys::AbstractQuantumSystem) = sys.H(zeros(sys.n_drives), 0.0)
 
 """
     get_drives(sys::AbstractQuantumSystem)
@@ -44,7 +44,7 @@ Returns the drive Hamiltonians of the system.
 function get_drives(sys::AbstractQuantumSystem)
     H_drift = get_drift(sys)
     # Basis vectors for controls will extract drive operators
-    return [sys.H(I[1:sys.n_drives, i]) - H_drift for i ∈ 1:sys.n_drives]
+    return [sys.H(I[1:sys.n_drives, i], 0.0) - H_drift for i ∈ 1:sys.n_drives]
 end
 
 function Base.show(io::IO, sys::AbstractQuantumSystem)
@@ -63,6 +63,6 @@ function get_c_ops end
 
 include("quantum_systems.jl")
 include("composite_quantum_systems.jl")
-include("time_dependent_quantum_systems.jl")
+# include("time_dependent_quantum_systems.jl")  # Commented out - not yet refactored
 
 end

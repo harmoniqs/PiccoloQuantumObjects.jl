@@ -22,24 +22,30 @@ The [`QuantumSystem`](@ref) type is used to represent a quantum system with a dr
 Hamiltonian and a set of drive Hamiltonians,
 
 ```math
-H = H_{\text{drift}} + \sum_i a_i H_{\text{drives}}^{(i)}
+H(u, t) = H_{\text{drift}} + \sum_i u_i H_{\text{drives}}^{(i)}
 ```
+
+where ``u`` is the control vector and ``t`` is time.
 
 ```@docs; canonical = false
 QuantumSystem
 ```
 
 `QuantumSystem`'s are containers for quantum dynamics. Internally, they compute the
-necessary isomorphisms to perform the dynamics in a real vector space.
+necessary isomorphisms to perform the dynamics in a real vector space. All systems
+require explicit specification of `T_max` (maximum time) and `drive_bounds` (control bounds).
 
 =#
 
 H_drift = PAULIS[:Z]
 H_drives = [PAULIS[:X], PAULIS[:Y]]
-system = QuantumSystem(H_drift, H_drives)
+T_max = 10.0
+drive_bounds = [(-1.0, 1.0), (-1.0, 1.0)]
+system = QuantumSystem(H_drift, H_drives, T_max, drive_bounds)
 
-a_drives = [1, 0]
-system.H(a_drives)
+u_controls = [1.0, 0.0]
+t = 0.0
+system.H(u_controls, t)
 
 #=
 To extract the drift and drive Hamiltonians from a `QuantumSystem`, use the 
@@ -58,27 +64,13 @@ drives[2] |> sparse
 
 #=
 !!! note
-    We can also construct a `QuantumSystem` directly from a Hamiltonian function. Internally,
-    `ForwardDiff.jl` is used to compute the drives.
+    We can also construct a `QuantumSystem` directly from a Hamiltonian function.
+    The function must accept `(u, t)` arguments where `u` is the control vector and `t` is time.
 =#
 
-H(a) = PAULIS[:Z] + a[1] * PAULIS[:X] + a[2] * PAULIS[:Y]
-system = QuantumSystem(H, 2)
-get_drives(system)[1] |> sparse
-
-# _Create a noise model with a confusion matrix._
-function H(a; C::Matrix{Float64}=[1.0 0.0; 0.0 1.0])
-    b = C * a
-    return b[1] * PAULIS.X + b[2] * PAULIS.Y
-end
-
-C_matrix = [0.99 0.01; -0.01 1.01]
-system = QuantumSystem(a -> H(a, C=C_matrix), 2; params=Dict(:C => C_matrix))
-confused_drives = get_drives(system)
-confused_drives[1] |> sparse
-
-# 
-confused_drives[2] |> sparse
+H(u, t) = PAULIS[:Z] + u[1] * PAULIS[:X] + u[2] * PAULIS[:Y]
+system = QuantumSystem(H, 10.0, [(-1.0, 1.0), (-1.0, 1.0)])
+system.H([1.0, 0.0], 0.0) |> sparse
 
 #=
 ## Open quantum systems
@@ -95,7 +87,9 @@ OpenQuantumSystem
 H_drives = [PAULIS[:X]]
 a = annihilate(2)
 dissipation_operators = [a'a, a]
-system = OpenQuantumSystem(H_drives, dissipation_operators=dissipation_operators)
+T_max = 10.0
+drive_bounds = [(-1.0, 1.0)]
+system = OpenQuantumSystem(H_drives, T_max, drive_bounds, dissipation_operators=dissipation_operators)
 system.dissipation_operators[1] |> sparse
 
 # 
@@ -111,41 +105,6 @@ system.dissipation_operators[2] |> sparse
 get_drift(system) |> sparse
 
 #=
-## Time Dependent Quantum Systems
-A [`TimeDependentQuantumSystem`](@ref) is a `QuantumSystem` with time-dependent Hamiltonians.
-```@docs; canonical = false
-TimeDependentQuantumSystem
-```
-
-A function `H(a, t)` or carrier and phase kwargs are used to specify time-dependent drives,
-```math
-    H(a, t) = H_{\text{drift}} + \sum_i a_i \cos(\omega_i t + \phi_i) H_{\text{drives}}^{(i)}
-```
-=#
-# _Create a time-dependent Hamiltonian with a time-dependent drive._
-H(a, t) = PAULIS.Z + a[1] * cos(t) * PAULIS.X
-system = TimeDependentQuantumSystem(H, 1)
-
-# _The drift Hamiltonian is the Z operator, but its now a function of time!_
-get_drift(system)(0.0) |> sparse
-
-# _The drive Hamiltonian is the X operator, but its now a function of time!_
-get_drives(system)[1](0.0) |> sparse
-
-# _Change the time to π._
-get_drives(system)[1](π) |> sparse
-
-# _Similar matrix constructors exist, but with carrier and phase kwargs._
-system = TimeDependentQuantumSystem(PAULIS.Z, [PAULIS.X], carriers=[1.0], phases=[0.0])
-
-# _This is the same as before, t=0.0:_
-get_drives(system)[1](0.0) |> sparse
-
-# _and at π:_
-get_drives(system)[1](π) |> sparse
-
-
-#=
 ## Composite quantum systems
 
 A [`CompositeQuantumSystem`](@ref) is constructed from a list of subsystems and their 
@@ -155,10 +114,10 @@ lifted to the full Hilbert space.
 
 =#
 
-system_1 = QuantumSystem([PAULIS[:X]])
-system_2 = QuantumSystem([PAULIS[:Y]])
+system_1 = QuantumSystem([PAULIS[:X]], 1.0, [(-1.0, 1.0)])
+system_2 = QuantumSystem([PAULIS[:Y]], 1.0, [(-1.0, 1.0)])
 H_drift = PAULIS[:Z] ⊗ PAULIS[:Z]
-system = CompositeQuantumSystem(H_drift, [system_1, system_2]);
+system = CompositeQuantumSystem(H_drift, Matrix{ComplexF64}[], [system_1, system_2], 1.0, Float64[]);
 
 # _The drift Hamiltonian is the ZZ coupling._
 get_drift(system) |> sparse
@@ -214,11 +173,11 @@ is_reachable
 =#
 
 # _Y can be reached by commuting Z and X._
-system = QuantumSystem(PAULIS[:Z], [PAULIS[:X]])
+system = QuantumSystem(PAULIS[:Z], [PAULIS[:X]], 1.0, [(-1.0, 1.0)])
 is_reachable(PAULIS[:Y], system)
 
 # _Y cannot be reached by X alone._
-system = QuantumSystem([PAULIS[:X]])
+system = QuantumSystem([PAULIS[:X]], 1.0, [(-1.0, 1.0)])
 is_reachable(PAULIS[:Y], system)
 
 #=
@@ -231,7 +190,7 @@ direct_sum
 =#
 
 # _Create a pair of non-interacting qubits._
-system_1 = QuantumSystem(PAULIS[:Z], [PAULIS[:X], PAULIS[:Y]])
-system_2 = QuantumSystem(PAULIS[:Z], [PAULIS[:X], PAULIS[:Y]])
+system_1 = QuantumSystem(PAULIS[:Z], [PAULIS[:X], PAULIS[:Y]], 1.0, [(-1.0, 1.0), (-1.0, 1.0)])
+system_2 = QuantumSystem(PAULIS[:Z], [PAULIS[:X], PAULIS[:Y]], 1.0, [(-1.0, 1.0), (-1.0, 1.0)])
 system = direct_sum(system_1, system_2)
 get_drift(system) |> sparse
