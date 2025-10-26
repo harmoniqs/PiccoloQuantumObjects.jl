@@ -1,4 +1,5 @@
 [deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
 LiveServer = "16fef848-5104-11e9-1b77-fb7a48bbb589"
@@ -8,4 +9,11 @@ PiccoloQuantumObjects = "5a402ddf-f93c-42eb-975e-5582dcda653d"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 
 [compat]
-Literate = "2.7.0"
+CairoMakie = "0.13"
+Documenter = "1.15"
+Literate = "2.20"
+LiveServer = "1.5"
+NamedTrajectories = "0.5"
+PiccoloDocsTemplate = "0.2"
+PiccoloQuantumObjects = "0.7"
+Revise = "3.11"

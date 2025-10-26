@@ -63,6 +63,6 @@ function get_c_ops end
 
 include("quantum_systems.jl")
 include("composite_quantum_systems.jl")
-include("time_dependent_quantum_systems.jl")
+# include("time_dependent_quantum_systems.jl")  # Commented out - not yet refactored
 
 end

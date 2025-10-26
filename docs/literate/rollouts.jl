@@ -81,7 +81,7 @@ T = 10
 ψ_init = ComplexF64[1.0, 0.0]
 controls = rand(2, T)
 Δt = fill(0.1, T)
-system = QuantumSystem(PAULIS[:Z], [PAULIS[:X], PAULIS[:Y]])
+system = QuantumSystem(PAULIS[:Z], [PAULIS[:X], PAULIS[:Y]], 1.0, [(-1.0, 1.0), (-1.0, 1.0)])
 ψ̃_rollout = rollout(ψ_init, controls, Δt, system) 
 ψ̃_rollout |> size
 
