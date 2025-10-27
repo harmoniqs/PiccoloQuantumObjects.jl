@@ -87,7 +87,7 @@ get_c_ops(sys::OpenQuantumSystem) = Qobj.(sys.dissipation_operators)
         res = mesolve(H_t, ψ0, get_times(traj))
         
         @test abs2(res.states[end]'ψT) ≈ 1.0 atol=1e-2
-        @test length(res.states) == traj.T
+        @test length(res.states) == traj.N
     end
 
     @testset "mesolve with OpenQuantumSystem and traj" begin
@@ -96,11 +96,11 @@ get_c_ops(sys::OpenQuantumSystem) = Qobj.(sys.dissipation_operators)
 
         res = mesolve(H_t, ψ0, get_times(traj))
         @test size(res.states[end]) == (2,)
-        @test length(res.states) == traj.T
+        @test length(res.states) == traj.N
 
         open_res = mesolve(H_t, ψ0, get_times(traj), get_c_ops(open_sys))
         @test size(open_res.states[end]) == (2, 2)
-        @test length(open_res.states) == traj.T
+        @test length(open_res.states) == traj.N
 
         # @test abs2(res.states[end]'ψT) ≈ 1.0 atol=1e-2
     end

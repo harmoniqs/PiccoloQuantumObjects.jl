@@ -9,10 +9,4 @@ PiccoloQuantumObjects = "5a402ddf-f93c-42eb-975e-5582dcda653d"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 
 [compat]
-CairoMakie = "0.13"
-Documenter = "1.15"
-Literate = "2.20"
-LiveServer = "1.5"
-NamedTrajectories = "0.5"
-PiccoloDocsTemplate = "0.2"
-Revise = "3.11"
+

@@ -1,7 +1,7 @@
 name = "PiccoloQuantumObjects"
 uuid = "5a402ddf-f93c-42eb-975e-5582dcda653d"
 authors = ["Aaron Trowbridge <aaron.j.trowbridge@gmail.com> and contributors"]
-version = "0.7.0"
+version = "0.7.1"
 
 [deps]
 ExponentialAction = "e24c0720-ea99-47e8-929e-571b494574d3"
@@ -22,10 +22,10 @@ QuantumToolboxExt = ["QuantumToolbox"]
 
 [compat]
 ExponentialAction = "0.2"
-ForwardDiff = "0.10, 1.0"
+ForwardDiff = "1.2"
 LinearAlgebra = "1.10, 1.11, 1.12"
-NamedTrajectories = "0.5"
-ProgressMeter = "1.10"
+NamedTrajectories = "0.6"
+ProgressMeter = "1.11"
 Reexport = "1.2"
 SparseArrays = "1.10, 1.11, 1.12"
 TestItemRunner = "1.1"
