@@ -1,9 +1,3 @@
-using ..Isomorphisms
-using SparseArrays: sparse, spzeros
-
-export QuantumSystem
-export OpenQuantumSystem
-export VariationalQuantumSystem
 
 # ----------------------------------------------------------------------------- #
 # QuantumSystem
@@ -253,9 +247,6 @@ Constructs an OpenQuantumSystem object from the drift and drive Hamiltonian term
 dissipation operators. All constructors require T_max (maximum time) and drive_bounds
 (control bounds for each drive) to be explicitly specified.
 """
-function OpenQuantumSystem end
-
-# Main constructor from Hamiltonian components 
 function OpenQuantumSystem(
     H_drift::AbstractMatrix{<:Number},
     H_drives::Vector{<:AbstractMatrix{<:Number}},
@@ -441,8 +432,6 @@ varsys = VariationalQuantumSystem(
 )
 ```
 """
-function VariationalQuantumSystem end
-
 function VariationalQuantumSystem(
     H_drift::AbstractMatrix{<:Number},
     H_drives::AbstractVector{<:AbstractMatrix{<:Number}},

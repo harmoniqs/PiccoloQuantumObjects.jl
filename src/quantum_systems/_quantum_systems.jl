@@ -1,6 +1,11 @@
 module QuantumSystems
 
 export AbstractQuantumSystem
+export QuantumSystem
+export OpenQuantumSystem
+export VariationalQuantumSystem
+export CompositeQuantumSystem
+export lift_operator
 
 export get_drift
 export get_drives
@@ -63,6 +68,5 @@ function get_c_ops end
 
 include("quantum_systems.jl")
 include("composite_quantum_systems.jl")
-# include("time_dependent_quantum_systems.jl")  # Commented out - not yet refactored
 
 end
