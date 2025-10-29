@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Quickstart · PiccoloQuantumObjects.jl</title><meta name="title" content="Quickstart · PiccoloQuantumObjects.jl"/><meta property="og:title" content="Quickstart · PiccoloQuantumObjects.jl"/><meta property="twitter:title" content="Quickstart · PiccoloQuantumObjects.jl"/><meta name="description" content="Documentation for PiccoloQuantumObjects.jl."/><meta property="og:description" content="Documentation for PiccoloQuantumObjects.jl."/><meta property="twitter:description" content="Documentation for PiccoloQuantumObjects.jl."/><meta property="og:url" content="https://docs.harmoniqs.co/PiccoloQuantumObjects.jl/generated/quickstart/"/><meta property="twitter:url" content="https://docs.harmoniqs.co/PiccoloQuantumObjects.jl/generated/quickstart/"/><link rel="canonical" href="https://docs.harmoniqs.co/PiccoloQuantumObjects.jl/generated/quickstart/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.svg" alt="PiccoloQuantumObjects.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">PiccoloQuantumObjects.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li class="is-active"><a class="tocitem" href>Quickstart</a><ul class="internal"><li><a class="tocitem" href="#Installation"><span>Installation</span></a></li><li><a class="tocitem" href="#Basic-Usage"><span>Basic Usage</span></a></li><li><a class="tocitem" href="#Visualization"><span>Visualization</span></a></li><li><a class="tocitem" href="#Next-Steps"><span>Next Steps</span></a></li></ul></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../quantum_systems_base/">Quantum Systems</a></li><li><a class="tocitem" href="../open_quantum_systems/">Open Quantum Systems</a></li><li><a class="tocitem" href="../variational_quantum_systems/">Variational Quantum Systems</a></li><li><a class="tocitem" href="../composite_quantum_systems/">Composite Quantum Systems</a></li><li><a class="tocitem" href="../quantum_objects/">Quantum Objects</a></li><li><a class="tocitem" href="../rollouts/">Rollouts</a></li><li><a class="tocitem" href="../isomorphisms/">Isomorphisms</a></li></ul></li><li><a class="tocitem" href="../../lib/">Library</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Quickstart</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Quickstart</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/harmoniqs/PiccoloQuantumObjects.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/harmoniqs/PiccoloQuantumObjects.jl/blob/main/docs/literate/quickstart.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Quickstart"><a class="docs-heading-anchor" href="#Quickstart">Quickstart</a><a id="Quickstart-1"></a><a class="docs-heading-anchor-permalink" href="#Quickstart" title="Permalink"></a></h1><p>This quickstart guide will help you get up and running with PiccoloQuantumObjects.jl.</p><h2 id="Installation"><a class="docs-heading-anchor" href="#Installation">Installation</a><a id="Installation-1"></a><a class="docs-heading-anchor-permalink" href="#Installation" title="Permalink"></a></h2><pre><code class="language-julia hljs">using Pkg
+Pkg.add(&quot;PiccoloQuantumObjects&quot;)</code></pre><h2 id="Basic-Usage"><a class="docs-heading-anchor" href="#Basic-Usage">Basic Usage</a><a id="Basic-Usage-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Usage" title="Permalink"></a></h2><pre><code class="language-julia hljs">using PiccoloQuantumObjects
+using LinearAlgebra
+using SparseArrays
+using NamedTrajectories</code></pre><h3 id="Creating-a-Quantum-System"><a class="docs-heading-anchor" href="#Creating-a-Quantum-System">Creating a Quantum System</a><a id="Creating-a-Quantum-System-1"></a><a class="docs-heading-anchor-permalink" href="#Creating-a-Quantum-System" title="Permalink"></a></h3><p>Define Hamiltonian components</p><pre><code class="language-julia hljs">H_drift = PAULIS[:Z]
+H_drives = [PAULIS[:X], PAULIS[:Y]]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{Matrix{ComplexF64}}:
+ [0.0 + 0.0im 1.0 + 0.0im; 1.0 + 0.0im 0.0 + 0.0im]
+ [0.0 + 0.0im 0.0 - 1.0im; 0.0 + 1.0im 0.0 + 0.0im]</code></pre><p>Specify time and control bounds</p><pre><code class="language-julia hljs">T_max = 10.0  # Maximum evolution time
+drive_bounds = [(-1.0, 1.0), (-1.0, 1.0)]  # Control bounds for each drive</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{Tuple{Float64, Float64}}:
+ (-1.0, 1.0)
+ (-1.0, 1.0)</code></pre><p>Create the quantum system</p><pre><code class="language-julia hljs">system = QuantumSystem(H_drift, H_drives, T_max, drive_bounds)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">QuantumSystem: levels = 2, n_drives = 2</code></pre><h3 id="Working-with-Quantum-States"><a class="docs-heading-anchor" href="#Working-with-Quantum-States">Working with Quantum States</a><a id="Working-with-Quantum-States-1"></a><a class="docs-heading-anchor-permalink" href="#Working-with-Quantum-States" title="Permalink"></a></h3><p>Create quantum states</p><pre><code class="language-julia hljs">ψ_ground = ket_from_string(&quot;g&quot;, [2])  # Ground state</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{ComplexF64}:
+ 1.0 + 0.0im
+ 0.0 + 0.0im</code></pre><pre><code class="language-julia hljs">ψ_excited = ket_from_string(&quot;e&quot;, [2])  # Excited state</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{ComplexF64}:
+ 0.0 + 0.0im
+ 1.0 + 0.0im</code></pre><p>Calculate fidelity</p><pre><code class="language-julia hljs">fidelity(ψ_ground, ψ_excited)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0.0</code></pre><h3 id="Simulating-Evolution-(Rollouts)"><a class="docs-heading-anchor" href="#Simulating-Evolution-(Rollouts)">Simulating Evolution (Rollouts)</a><a id="Simulating-Evolution-(Rollouts)-1"></a><a class="docs-heading-anchor-permalink" href="#Simulating-Evolution-(Rollouts)" title="Permalink"></a></h3><p>Initial state</p><pre><code class="language-julia hljs">ψ_init = ComplexF64[1.0, 0.0]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{ComplexF64}:
+ 1.0 + 0.0im
+ 0.0 + 0.0im</code></pre><p>Define control sequence</p><pre><code class="language-julia hljs">T = 10  # Number of time steps
+controls = rand(2, T)  # Random controls for two drives
+Δt = fill(0.1, T)  # Time step duration</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">10-element Vector{Float64}:
+ 0.1
+ 0.1
+ 0.1
+ 0.1
+ 0.1
+ 0.1
+ 0.1
+ 0.1
+ 0.1
+ 0.1</code></pre><p>Perform rollout</p><pre><code class="language-julia hljs">ψ̃_rollout = rollout(ψ_init, controls, Δt, system)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4×10 Matrix{Float64}:
+ 1.0   0.992535    0.96848     0.937524   …   0.641483   0.52834    0.419975
+ 0.0   0.0109181   0.0522196   0.0793488      0.274655   0.29278    0.329771
+ 0.0  -0.099751   -0.195744   -0.290101      -0.578512  -0.641532  -0.68117
+ 0.0  -0.0693195  -0.144926   -0.174913      -0.422359  -0.472836  -0.500879</code></pre><p>Check final state fidelity</p><pre><code class="language-julia hljs">ψ_goal = ComplexF64[0.0, 1.0]
+rollout_fidelity(ψ_init, ψ_goal, controls, Δt, system)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0.359628875136596</code></pre><h3 id="Open-Quantum-Systems"><a class="docs-heading-anchor" href="#Open-Quantum-Systems">Open Quantum Systems</a><a id="Open-Quantum-Systems-1"></a><a class="docs-heading-anchor-permalink" href="#Open-Quantum-Systems" title="Permalink"></a></h3><p>Add dissipation operators</p><pre><code class="language-julia hljs">a = annihilate(2)
+dissipation_operators = [a&#39;a, a]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{Matrix{ComplexF64}}:
+ [0.0 + 0.0im 0.0 + 0.0im; 0.0 + 0.0im 1.0 + 0.0im]
+ [0.0 + 0.0im 1.0 + 0.0im; 0.0 + 0.0im 0.0 + 0.0im]</code></pre><p>Create open quantum system</p><pre><code class="language-julia hljs">open_system = OpenQuantumSystem(
+    H_drives,
+    T_max,
+    drive_bounds,
+    dissipation_operators=dissipation_operators
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">OpenQuantumSystem: levels = 2, n_drives = 2</code></pre><h3 id="Composite-Systems"><a class="docs-heading-anchor" href="#Composite-Systems">Composite Systems</a><a id="Composite-Systems-1"></a><a class="docs-heading-anchor-permalink" href="#Composite-Systems" title="Permalink"></a></h3><p>Create subsystems</p><pre><code class="language-julia hljs">sys1 = QuantumSystem([PAULIS[:X]], 10.0, [(-1.0, 1.0)])
+sys2 = QuantumSystem([PAULIS[:Y]], 10.0, [(-1.0, 1.0)])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">QuantumSystem: levels = 2, n_drives = 1</code></pre><p>Define coupling</p><pre><code class="language-julia hljs">H_coupling = 0.1 * kron(PAULIS[:Z], PAULIS[:Z])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4×4 Matrix{ComplexF64}:
+ 0.1+0.0im   0.0+0.0im   0.0+0.0im   0.0+0.0im
+ 0.0+0.0im  -0.1+0.0im   0.0+0.0im  -0.0+0.0im
+ 0.0+0.0im   0.0+0.0im  -0.1+0.0im  -0.0+0.0im
+ 0.0+0.0im  -0.0+0.0im  -0.0+0.0im   0.1-0.0im</code></pre><p>Create composite system</p><pre><code class="language-julia hljs">composite_sys = CompositeQuantumSystem(
+    H_coupling,
+    Matrix{ComplexF64}[],
+    [sys1, sys2],
+    10.0,
+    Float64[]
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">CompositeQuantumSystem: levels = 4, n_drives = 2</code></pre><h2 id="Visualization"><a class="docs-heading-anchor" href="#Visualization">Visualization</a><a id="Visualization-1"></a><a class="docs-heading-anchor-permalink" href="#Visualization" title="Permalink"></a></h2><p>PiccoloQuantumObjects.jl integrates with NamedTrajectories.jl for plotting trajectories.</p><pre><code class="language-julia hljs">using CairoMakie</code></pre><h3 id="Plotting-Controls-and-States"><a class="docs-heading-anchor" href="#Plotting-Controls-and-States">Plotting Controls and States</a><a id="Plotting-Controls-and-States-1"></a><a class="docs-heading-anchor-permalink" href="#Plotting-Controls-and-States" title="Permalink"></a></h3><p>Create a trajectory with controls and states</p><pre><code class="language-julia hljs">T_plot = 50
+controls_plot = 0.5 * sin.(2π * (1:T_plot) / T_plot)
+Δt_plot = fill(T_max / T_plot, T_plot)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">50-element Vector{Float64}:
+ 0.2
+ 0.2
+ 0.2
+ 0.2
+ 0.2
+ 0.2
+ 0.2
+ 0.2
+ 0.2
+ 0.2
+ ⋮
+ 0.2
+ 0.2
+ 0.2
+ 0.2
+ 0.2
+ 0.2
+ 0.2
+ 0.2
+ 0.2</code></pre><p>Perform a rollout to get the state evolution</p><pre><code class="language-julia hljs">ψ̃_traj = rollout(ψ_init, hcat(controls_plot, -controls_plot)&#39;, Δt_plot, system)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4×50 Matrix{Float64}:
+ 1.0   0.979911    0.919701    0.82018    …  -0.306636  -0.118921   0.0726682
+ 0.0  -0.0124493  -0.0388295  -0.0791013      0.13996    0.166036   0.198433
+ 0.0  -0.198659   -0.389215   -0.563388       0.894051   0.947331   0.957062
+ 0.0  -0.0124493  -0.0339619  -0.0603398     -0.295058  -0.246687  -0.198433</code></pre><p>Create a NamedTrajectory for plotting</p><pre><code class="language-julia hljs">traj = NamedTrajectory(
+    (
+        ψ̃ = ψ̃_traj,
+        a = hcat(controls_plot, -controls_plot)&#39;,
+        Δt = Δt_plot
+    );
+    timestep=:Δt,
+    controls=:a,
+    initial=(ψ̃ = ket_to_iso(ψ_init),),
+    goal=(ψ̃ = ket_to_iso(ψ_goal),)
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">N = 50, (ψ̃ = 1:4, a = 5:6, → Δt = 7:7)</code></pre><p>Plot the trajectory</p><pre><code class="language-julia hljs">plot(traj)</code></pre><img src="7897a9c8.png" alt="Example block output"/><h3 id="Plotting-State-Populations"><a class="docs-heading-anchor" href="#Plotting-State-Populations">Plotting State Populations</a><a id="Plotting-State-Populations-1"></a><a class="docs-heading-anchor-permalink" href="#Plotting-State-Populations" title="Permalink"></a></h3><p>Use transformations to plot populations directly from isomorphic states</p><pre><code class="language-julia hljs">plot(
+    traj,
+    [:a],
+    transformations=[
+        :ψ̃ =&gt; (ψ̃ -&gt; abs2.(iso_to_ket(ψ̃)))
+    ],
+    transformation_labels=[&quot;Populations&quot;]
+)</code></pre><img src="1e7e5009.png" alt="Example block output"/><h2 id="Next-Steps"><a class="docs-heading-anchor" href="#Next-Steps">Next Steps</a><a id="Next-Steps-1"></a><a class="docs-heading-anchor-permalink" href="#Next-Steps" title="Permalink"></a></h2><ul><li>Explore the <a href="@ref">Quantum Systems</a> manual for detailed system construction</li><li>Learn about <a href="../quantum_objects/#Quantum-Objects">Quantum Objects</a> for working with states and operators</li><li>See <a href="../../lib/#Rollouts">Rollouts</a> for simulation and fidelity calculations</li><li>Understand <a href="../isomorphisms/#Isomorphisms">Isomorphisms</a> for the underlying mathematical transformations</li></ul><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../quantum_systems_base/">Quantum Systems »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.15.0 on <span class="colophon-date" title="Wednesday 29 October 2025 04:28">Wednesday 29 October 2025</span>. Using Julia version 1.12.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
