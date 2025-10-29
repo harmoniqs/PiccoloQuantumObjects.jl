@@ -17,7 +17,6 @@ A struct for storing open quantum dynamics.
 - `n_drives::Int`: The number of control drives
 - `levels::Int`: The number of levels in the system
 - `dissipation_operators::Vector{SparseMatrixCSC{ComplexF64, Int}}`: The dissipation operators
-- `params::Dict{Symbol, Any}`: Additional parameters
 
 See also [`QuantumSystem`](@ref).
 """
@@ -31,7 +30,6 @@ struct OpenQuantumSystem{F1<:Function, F2<:Function} <: AbstractQuantumSystem
     n_drives::Int
     levels::Int
     dissipation_operators::Vector{SparseMatrixCSC{ComplexF64, Int}}
-    params::Dict{Symbol, Any}
 end
 
 """
@@ -40,34 +38,28 @@ end
         H_drives::AbstractVector{<:AbstractMatrix{<:Number}},
         T_max::Float64,
         drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
-        dissipation_operators::AbstractVector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[],
-        params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+        dissipation_operators::AbstractVector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[]
     )
     OpenQuantumSystem(
         H_drift::AbstractMatrix{<:Number}, 
-        T_max::Float64, 
-        drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
-        dissipation_operators::AbstractVector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[],
-        params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+        T_max::Float64;
+        dissipation_operators::AbstractVector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[]
     )
     OpenQuantumSystem(
         H_drives::Vector{<:AbstractMatrix{<:Number}},
         T_max::Float64, 
         drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
-        dissipation_operators::AbstractVector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[],
-        params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+        dissipation_operators::AbstractVector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[]
     )
     OpenQuantumSystem(
         H::Function, 
         T_max::Float64,
         drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
-        dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[],
-        params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+        dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[]
     )
     OpenQuantumSystem(
         system::QuantumSystem; 
-        dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[],
-        params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+        dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[]
     )
 
 Constructs an OpenQuantumSystem object from the drift and drive Hamiltonian terms and
@@ -79,8 +71,7 @@ function OpenQuantumSystem(
     H_drives::Vector{<:AbstractMatrix{<:Number}},
     T_max::Float64,
     drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
-    dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[],
-    params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+    dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[]
 )
     drive_bounds = [
         b isa Tuple ? b : (-b, b) for b in drive_bounds
@@ -119,8 +110,7 @@ function OpenQuantumSystem(
         drive_bounds,
         n_drives,
         levels,
-        sparse.(dissipation_operators),
-        params
+        sparse.(dissipation_operators)
     )
 end
 
@@ -129,30 +119,27 @@ function OpenQuantumSystem(
     H_drives::Vector{<:AbstractMatrix{ℂ}}, 
     T_max::Float64, 
     drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
-    dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[],
-    params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+    dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[]
 ) where ℂ <: Number
     @assert !isempty(H_drives) "At least one drive is required"
     return OpenQuantumSystem(spzeros(ℂ, size(H_drives[1])), H_drives, T_max, drive_bounds;
-                            dissipation_operators=dissipation_operators, params=params)
+                            dissipation_operators=dissipation_operators)
 end
 
 function OpenQuantumSystem(
     H_drift::AbstractMatrix{ℂ}, 
     T_max::Float64; 
-    dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[],
-    params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+    dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[]
 ) where ℂ <: Number 
     return OpenQuantumSystem(H_drift, Matrix{ℂ}[], T_max, Float64[];
-                            dissipation_operators=dissipation_operators, params=params)
+                            dissipation_operators=dissipation_operators)
 end
 
 function OpenQuantumSystem(
     H::F, 
     T_max::Float64,
     drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
-    dissipation_operators::Vector{<:AbstractMatrix{ℂ}}=Matrix{ComplexF64}[],
-    params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+    dissipation_operators::Vector{<:AbstractMatrix{ℂ}}=Matrix{ComplexF64}[]
 ) where {F <: Function, ℂ <: Number}
     
     drive_bounds = [
@@ -181,20 +168,17 @@ function OpenQuantumSystem(
         drive_bounds,
         n_drives,
         levels,
-        sparse.(dissipation_operators),
-        params
+        sparse.(dissipation_operators)
     )
 end
 
 function OpenQuantumSystem(
     system::QuantumSystem; 
-    dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[],
-    params::Dict{Symbol, <:Any}=Dict{Symbol, Any}()
+    dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[]
 )
     return OpenQuantumSystem(
         system.H_drift, system.H_drives, system.T_max, system.drive_bounds;
-        dissipation_operators=dissipation_operators,
-        params=params
+        dissipation_operators=dissipation_operators
     )
 end
 
