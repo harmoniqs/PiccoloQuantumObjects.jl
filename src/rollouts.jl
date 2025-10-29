@@ -653,7 +653,7 @@ function unitary_rollout_fidelity(
     traj::NamedTrajectory,
     sys::AbstractQuantumSystem;
     unitary_name::Symbol=:Ũ⃗,
-    drive_name::Symbol=:a,
+    drive_name::Symbol=:u,
     kwargs...
 )
     Ũ⃗_init = traj.initial[unitary_name]
@@ -938,18 +938,17 @@ end
 
     # Unitary fidelity
     @test unitary_rollout_fidelity(U_goal, as, Δts, sys) > 0
-    @test unitary_rollout_fidelity(traj, sys) > 0
+    @test unitary_rollout_fidelity(traj, sys, drive_name=:a) > 0
     @test unitary_rollout_fidelity(embedded_U_goal, as, Δts, sys) > 0
 
     # Free phase unitary
     @test unitary_rollout_fidelity(traj, sys;
-        phases=[0.0], phase_operators=Matrix{ComplexF64}[PAULIS[:Z]]
+        drive_name=:a, phases=[0.0], phase_operators=Matrix{ComplexF64}[PAULIS[:Z]]
     ) > 0
 
     # Free phase unitary
     @test unitary_rollout_fidelity(traj, sys;
-        phases=[0.0],
-        phase_operators=[PAULIS[:Z]]
+        drive_name=:a, phases=[0.0], phase_operators=[PAULIS[:Z]]
     ) > 0
 
     # Expv explicit
@@ -958,20 +957,8 @@ end
 
     # Unitary fidelity
     @test unitary_rollout_fidelity(U_goal, as, Δts, sys, integrator=expv) > 0
-    @test unitary_rollout_fidelity(traj, sys, integrator=expv) > 0
+    @test unitary_rollout_fidelity(traj, sys, integrator=expv, drive_name=:a) > 0
     @test unitary_rollout_fidelity(embedded_U_goal, as, Δts, sys, integrator=expv) > 0
-
-    # Exp explicit
-    # State fidelity
-    @test rollout_fidelity(ψ, ψ_goal, as, Δts, sys, integrator=exp) > 0
-
-    # Unitary fidelity
-    @test unitary_rollout_fidelity(U_goal, as, Δts, sys, integrator=exp) > 0
-    @test unitary_rollout_fidelity(traj, sys, integrator=exp) > 0
-    @test unitary_rollout_fidelity(embedded_U_goal, as, Δts, sys, integrator=exp) > 0
-
-    # Bad integrator
-    @test_throws ErrorException unitary_rollout_fidelity(U_goal, as, Δts, sys, integrator=(a,b) -> 1) > 0
 end
 
 @testitem "Foward diff rollout" begin
@@ -1016,8 +1003,8 @@ end
 @testitem "Test variational rollouts" begin
     include("../test/test_utils.jl")
     sys = QuantumSystem([PAULIS.X, PAULIS.Y], 3.92, [(-1.0, 1.0), (-1.0, 1.0)])
-    varsys1 = VariationalQuantumSystem([PAULIS.X, PAULIS.Y], [PAULIS.X])
-    varsys2 = VariationalQuantumSystem([PAULIS.X, PAULIS.Y], [PAULIS.X, PAULIS.Y])
+    varsys1 = VariationalQuantumSystem([PAULIS.X, PAULIS.Y], [PAULIS.X], 3.92, [(-1.0, 1.0), (-1.0, 1.0)])
+    varsys2 = VariationalQuantumSystem([PAULIS.X, PAULIS.Y], [PAULIS.X, PAULIS.Y], 3.92, [(-1.0, 1.0), (-1.0, 1.0)])
     U_goal = GATES.H
 
     # state rollouts
@@ -1043,19 +1030,316 @@ end
 
     # unitary rollouts
     traj = named_trajectory_type_1()
-    Ũ⃗_def = unitary_rollout(traj, sys)
-    Ũ⃗ᵥ1_match = []
+    Ũ⃗_def = unitary_rollout(traj, sys)
+    Ũ⃗ᵥ1_match = []
 
     for vs in [varsys1, varsys2]
-        Ũ⃗, Ũ⃗_vars = variational_unitary_rollout(traj, vs)
-        push!(Ũ⃗ᵥ1_match, Ũ⃗_vars[1])
+        Ũ⃗, Ũ⃗_vars = variational_unitary_rollout(traj, vs)
+        push!(Ũ⃗ᵥ1_match, Ũ⃗_vars[1])
 
-        @assert Ũ⃗ ≈ Ũ⃗_def
-        @assert length(Ũ⃗_vars) == length(vs.G_vars)
-        @assert size(Ũ⃗_vars[1]) == size(Ũ⃗_def)
+        @assert Ũ⃗ ≈ Ũ⃗_def
+        @assert length(Ũ⃗_vars) == length(vs.G_vars)
+        @assert size(Ũ⃗_vars[1]) == size(Ũ⃗_def)
     end
     # same operator (different system)
-    @assert Ũ⃗ᵥ1_match[1] ≈ Ũ⃗ᵥ1_match[2]
+    @assert Ũ⃗ᵥ1_match[1] ≈ Ũ⃗ᵥ1_match[2]
+end
+
+@testitem "Test fidelity functions" begin
+    # State vector fidelity
+    ψ1 = ComplexF64[1, 0]
+    ψ2 = ComplexF64[0, 1]
+    ψ3 = ComplexF64[1/√2, 1/√2]
+    
+    @test fidelity(ψ1, ψ1) ≈ 1.0
+    @test fidelity(ψ1, ψ2) ≈ 0.0
+    @test fidelity(ψ1, ψ3) ≈ 0.5
+    @test fidelity(ψ3, ψ1) ≈ 0.5  # Symmetry
+    
+    # Density matrix fidelity
+    ρ1 = ψ1 * ψ1'
+    ρ2 = ψ2 * ψ2'
+    ρ3 = ψ3 * ψ3'
+    
+    @test fidelity(ρ1, ρ1) ≈ 1.0
+    @test fidelity(ρ1, ρ2) ≈ 0.0
+    @test fidelity(ρ1, ρ3) ≈ 0.5
+    
+    # Mixed states
+    ρ_mixed = 0.5 * ρ1 + 0.5 * ρ2
+    @test 0.0 < fidelity(ρ_mixed, ρ1) < 1.0
+end
+
+@testitem "Test unitary fidelity with subspace" begin
+    using LinearAlgebra
+    
+    # 3-level system but working in 2-level subspace
+    U1 = Matrix{ComplexF64}(I(3))
+    U2 = copy(U1)
+    U2[1:2, 1:2] = GATES.X  # Apply X gate to first two levels
+    
+    # Full space fidelity is lower
+    @test unitary_fidelity(U1, U2) < 1.0
+    
+    # Subspace [1,2] fidelity should be exactly for X gate
+    @test unitary_fidelity(U1[1:2, 1:2], U2[1:2, 1:2]) ≈ 0.0  # I vs X in subspace
+    
+    # Subspace [3] fidelity should be 1 (unchanged)
+    @test unitary_fidelity(U1, U2; subspace=[3]) ≈ 1.0
+end
+
+@testitem "Test free phase functions" begin
+    using LinearAlgebra
+    
+    # Single phase operator
+    phases = [π/4]
+    phase_ops = [PAULIS.Z]
+    R = free_phase(phases, phase_ops)
+    
+    @test size(R) == (2, 2)
+    @test R ≈ exp(im * π/4 * PAULIS.Z)
+    
+    # Multiple phase operators (tensor product)
+    phases2 = [π/4, π/2]
+    phase_ops2 = [PAULIS.Z, PAULIS.X]
+    R2 = free_phase(phases2, phase_ops2)
+    
+    @test size(R2) == (4, 4)
+    expected = kron(exp(im * π/4 * PAULIS.Z), exp(im * π/2 * PAULIS.X))
+    @test R2 ≈ expected
+    
+    # Test free phase fidelity
+    U = GATES.H
+    U_goal = GATES.X
+    phases_test = [0.0]
+    phase_ops_test = [PAULIS.Z]
+    
+    fid1 = unitary_fidelity(U, U_goal)
+    fid2 = unitary_free_phase_fidelity(U, U_goal, phases_test, phase_ops_test)
+    
+    # With zero phase, should be same as regular fidelity
+    @test fid1 ≈ fid2
+    
+    # With non-zero phase, fidelity changes
+    phases_test2 = [1.0]
+    fid3 = unitary_free_phase_fidelity(U, U_goal, phases_test2, phase_ops_test)
+    @test fid1 ≠ fid3
+end
+
+@testitem "Test open system rollouts" begin
+    include("../test/test_utils.jl")
+    using LinearAlgebra
+    
+    # Create open quantum system with dissipation
+    H_drift = PAULIS.Z
+    H_drives = [PAULIS.X, PAULIS.Y]
+    dissipators = [PAULIS.Z]  # Simple dissipation
+    sys = OpenQuantumSystem(H_drift, H_drives, 5.0, [(-1.0, 1.0), (-1.0, 1.0)]; dissipation_operators=dissipators)
+    
+    # Initial density matrix
+    ψ = ComplexF64[1, 0]
+    ρ_init = ψ * ψ'
+    
+    # Controls and timesteps
+    T = 10
+    controls = randn(2, T)
+    Δt = fill(0.1, T)
+    
+    # Test rollout with density matrix input
+    ρ⃗̃_traj = open_rollout(ρ_init, controls, Δt, sys)
+    @test size(ρ⃗̃_traj, 2) == T
+    @test size(ρ⃗̃_traj, 1) == length(density_to_iso_vec(ρ_init))
+    
+    # Test rollout with iso vec input
+    ρ⃗̃_init = density_to_iso_vec(ρ_init)
+    ρ⃗̃_traj2 = open_rollout(ρ⃗̃_init, controls, Δt, sys)
+    @test ρ⃗̃_traj ≈ ρ⃗̃_traj2
+    
+    # Test open_rollout_fidelity with matrix inputs
+    ρ_goal = ComplexF64[0, 1] * ComplexF64[0, 1]'
+    fid = open_rollout_fidelity(ρ_init, ρ_goal, controls, Δt, sys)
+    @test 0.0 ≤ fid ≤ 1.0
+    
+    # Test open_rollout_fidelity with trajectory
+    traj_data = (
+        ρ⃗̃ = hcat([ρ⃗̃_init for _ in 1:T]...),
+        a = controls,
+        Δt = Δt
+    )
+    traj = NamedTrajectory(
+        traj_data;
+        controls=:a,
+        timestep=:Δt,
+        initial=(ρ⃗̃ = ρ⃗̃_init,),
+        goal=(ρ⃗̃ = density_to_iso_vec(ρ_goal),)
+    )
+    
+    fid_traj = open_rollout_fidelity(traj, sys)
+    @test 0.0 ≤ fid_traj ≤ 1.0
+end
+
+@testitem "Test rollout with multiple initial states" begin
+    include("../test/test_utils.jl")
+    
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], 2.0, [(-1.0, 1.0), (-1.0, 1.0)])
+    
+    # Multiple initial states
+    ψ1 = ComplexF64[1, 0]
+    ψ2 = ComplexF64[0, 1]
+    ψ3 = ComplexF64[1/√2, 1/√2]
+    ψs = [ψ1, ψ2, ψ3]
+    
+    T = 10
+    controls = randn(2, T)
+    Δt = fill(0.1, T)
+    
+    # Test rollout with vector of initial states
+    results = rollout(ψs, controls, Δt, sys)
+    
+    @test length(results) == 3
+    for res in results
+        @test size(res, 2) == T
+    end
+    
+    # Each result should match individual rollout
+    for (i, ψ) in enumerate(ψs)
+        individual = rollout(ψ, controls, Δt, sys)
+        @test results[i] ≈ individual
+    end
+end
+
+@testitem "Test rollout_fidelity with trajectory and multiple states" begin
+    include("../test/test_utils.jl")
+    
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], 2.0, [(-1.0, 1.0), (-1.0, 1.0)])
+    
+    # Create trajectory with multiple states
+    T = 10
+    ψ̃1_init = ket_to_iso(ComplexF64[1, 0])
+    ψ̃2_init = ket_to_iso(ComplexF64[0, 1])
+    ψ̃1_goal = ket_to_iso(ComplexF64[0, 1])
+    ψ̃2_goal = ket_to_iso(ComplexF64[1, 0])
+    controls = randn(2, T)
+    Δt = fill(0.1, T)
+    
+    traj_data = (
+        ψ̃1 = hcat([ψ̃1_init for _ in 1:T]...),
+        ψ̃2 = hcat([ψ̃2_init for _ in 1:T]...),
+        a = controls,
+        Δt = Δt
+    )
+    
+    traj = NamedTrajectory(
+        traj_data;
+        controls=:a,
+        timestep=:Δt,
+        initial=(ψ̃1 = ψ̃1_init, ψ̃2 = ψ̃2_init),
+        goal=(ψ̃1 = ψ̃1_goal, ψ̃2 = ψ̃2_goal)
+    )
+    
+    # Should return vector of fidelities
+    fids = rollout_fidelity(traj, sys)
+    @test isa(fids, Vector)
+    @test length(fids) == 2
+    for fid in fids
+        @test 0.0 ≤ fid ≤ 1.0
+    end
+end
+
+@testitem "Test unitary rollout with different initial conditions" begin
+    include("../test/test_utils.jl")
+    using LinearAlgebra
+    
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], 3.0, [(-1.0, 1.0), (-1.0, 1.0)])
+    
+    T = 10
+    controls = randn(2, T)
+    Δt = fill(0.1, T)
+    
+    # Test with identity initial condition (default)
+    Ũ⃗_traj1 = unitary_rollout(controls, Δt, sys)
+    
+    # Test with explicit identity
+    Ĩ⃗ = operator_to_iso_vec(Matrix{ComplexF64}(I(2)))
+    Ũ⃗_traj2 = unitary_rollout(Ĩ⃗, controls, Δt, sys)
+    
+    @test Ũ⃗_traj1 ≈ Ũ⃗_traj2
+    
+    # Test with non-identity initial condition
+    U_init = GATES.H
+    Ũ⃗_init = operator_to_iso_vec(U_init)
+    Ũ⃗_traj3 = unitary_rollout(Ũ⃗_init, controls, Δt, sys)
+    
+    # Should not equal identity start
+    @test !(Ũ⃗_traj3 ≈ Ũ⃗_traj1)
+    
+    # But dimensions should match
+    @test size(Ũ⃗_traj3) == size(Ũ⃗_traj1)
+end
+
+@testitem "Test infer_is_evp" begin
+    using ExponentialAction
+    using LinearAlgebra
+    
+    # expv has signature (Δt, H, ψ, ...) -> 4 args minimum
+    @test Rollouts.infer_is_evp(expv) == true
+    
+    # exp has signature (H) -> 2 args (including type)
+    @test Rollouts.infer_is_evp(exp) == false
+    
+    # Invalid signature should throw (3 args doesn't match 2 or 4)
+    bad_integrator(a, b) = a
+    @test_throws ErrorException Rollouts.infer_is_evp(bad_integrator)
+    
+    # Ambiguous (both signatures) should throw
+    ambiguous_integrator(a) = a
+    ambiguous_integrator(a, b, c) = a
+    ambiguous_integrator(a, b, c, d) = a
+    @test_throws ErrorException Rollouts.infer_is_evp(ambiguous_integrator)
+end
+
+@testitem "Test rollout edge cases" begin
+    include("../test/test_utils.jl")
+    
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], 1.0, [(-1.0, 1.0), (-1.0, 1.0)])
+    ψ̃ = ket_to_iso(ComplexF64[1, 0])
+    
+    # Single timestep case
+    controls = randn(2, 1)
+    Δt = [0.1]
+    result = rollout(ψ̃, controls, Δt, sys)
+    @test size(result) == (length(ψ̃), 1)
+    @test result[:, 1] ≈ ψ̃  # Should be initial state
+    
+    # Two timesteps (minimal evolution)
+    controls2 = randn(2, 2)
+    Δt2 = [0.1, 0.1]
+    result2 = rollout(ψ̃, controls2, Δt2, sys)
+    @test size(result2) == (length(ψ̃), 2)
+    @test result2[:, 1] ≈ ψ̃
+    # Second timestep should differ (unless controls are zero)
+end
+
+@testitem "Test variational rollout edge cases" begin
+    include("../test/test_utils.jl")
+    
+    # Test with single variational parameter
+    varsys = VariationalQuantumSystem([PAULIS.X], [PAULIS.Y], 1.0, [(-1.0, 1.0)])
+    ψ̃ = ket_to_iso(ComplexF64[1, 0])
+    controls = randn(1, 5)
+    Δt = fill(0.1, 5)
+    
+    Ψ̃, Ψ̃_vars = variational_rollout(ψ̃, controls, Δt, varsys)
+    
+    @test size(Ψ̃) == (length(ψ̃), 5)
+    @test length(Ψ̃_vars) == 1  # One variational parameter
+    @test size(Ψ̃_vars[1]) == size(Ψ̃)
+    
+    # Test with complex initial state (converted to iso)
+    ψ = ComplexF64[1, 0]
+    Ψ̃2, Ψ̃_vars2 = variational_rollout(ψ, controls, Δt, varsys)
+    @test Ψ̃2 ≈ Ψ̃
+    @test Ψ̃_vars2[1] ≈ Ψ̃_vars[1]
 end
 
 

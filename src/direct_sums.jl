@@ -88,12 +88,55 @@ direct_sum(systems::AbstractVector{<:QuantumSystem}) = reduce(direct_sum, system
     @test direct_sum(A, B) == sparse([1 2 0 0; 3 4 0 0; 0 0 5 6; 0 0 7 8])
 end
 
+
+
 @testitem "Test quantum system direct sum" begin
+    using PiccoloQuantumObjects: PAULIS
+    
+    # Test with no drives
     sys1 = QuantumSystem(ComplexF64[1 2; 3 4], 1.0)
     sys2 = QuantumSystem(ComplexF64[5 6; 7 8], 1.0)
     sys = direct_sum(sys1, sys2)
     @test sys.H(Float64[], 0.0) == ComplexF64[1 2 0 0; 3 4 0 0; 0 0 5 6; 0 0 7 8]
     @test sys.n_drives == 0
+    
+    # Test with drives
+    sys1 = QuantumSystem([PAULIS[:X]], 10.0, [(-1.0, 1.0)])
+    sys2 = QuantumSystem([PAULIS[:Y]], 10.0, [(-1.0, 1.0)])
+    sys = direct_sum(sys1, sys2)
+    @test sys.n_drives == 1
+    @test sys.T_max == 10.0
+    @test sys.drive_bounds == [(-1.0, 1.0)]
+    
+    # Check Hamiltonian structure
+    u = [0.5]
+    H = sys.H(u, 0.0)
+    @test size(H) == (4, 4)
+    
+    # Test with multiple drives
+    sys1 = QuantumSystem([PAULIS[:X], PAULIS[:Y]], 5.0, [1.0, 1.0])
+    sys2 = QuantumSystem([PAULIS[:Z], PAULIS[:X]], 5.0, [1.0, 1.0])
+    sys = direct_sum(sys1, sys2)
+    @test sys.n_drives == 2
+    @test sys.T_max == 5.0
+    
+    # Test with vector of systems
+    sys1 = QuantumSystem(PAULIS[:Z], 10.0)
+    sys2 = QuantumSystem(PAULIS[:X], 10.0)
+    sys3 = QuantumSystem(PAULIS[:Y], 10.0)
+    sys = direct_sum([sys1, sys2, sys3])
+    @test sys.n_drives == 0
+    @test size(sys.H(Float64[], 0.0)) == (6, 6)
+end
+
+@testitem "Test direct sum error handling" begin
+    using PiccoloQuantumObjects: PAULIS
+    
+    # Test mismatched n_drives
+    sys1 = QuantumSystem([PAULIS[:X]], 10.0, [(-1.0, 1.0)])
+    sys2 = QuantumSystem([PAULIS[:Y], PAULIS[:Z]], 10.0, [(-1.0, 1.0), (-1.0, 1.0)])
+    
+    @test_throws AssertionError direct_sum(sys1, sys2)
 end
 
 end
