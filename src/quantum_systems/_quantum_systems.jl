@@ -67,6 +67,8 @@ function get_c_ops end
 # ----------------------------------------------------------------------------- #
 
 include("quantum_systems.jl")
+include("open_quantum_systems.jl")
+include("variational_quantum_systems.jl")
 include("composite_quantum_systems.jl")
 
 end
