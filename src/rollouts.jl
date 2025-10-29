@@ -287,7 +287,7 @@ function rollout_fidelity(
     trajectory::NamedTrajectory,
     system::AbstractQuantumSystem;
     state_name::Symbol=:ψ̃,
-    control_name=:a,
+    control_name=:u,
     kwargs...
 )
     fids = []
