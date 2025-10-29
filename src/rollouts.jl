@@ -287,9 +287,21 @@ function rollout_fidelity(
     trajectory::NamedTrajectory,
     system::AbstractQuantumSystem;
     state_name::Symbol=:ψ̃,
-    control_name=:a,
+    control_name::Union{Symbol, Nothing}=nothing,
     kwargs...
 )
+    # Auto-detect control name if not specified
+    if isnothing(control_name)
+        # Try :u first, then :a for backward compatibility
+        if :u ∈ trajectory.names
+            control_name = :u
+        elseif :a ∈ trajectory.names
+            control_name = :a
+        else
+            error("Could not find control field :u or :a in trajectory. Please specify control_name explicitly.")
+        end
+    end
+    
     fids = []
     for name ∈ trajectory.names
         if startswith(string(name), string(state_name))
@@ -432,9 +444,21 @@ function open_rollout_fidelity(
     traj::NamedTrajectory,
     system::OpenQuantumSystem;
     state_name::Symbol=:ρ⃗̃,
-    control_name::Symbol=:a,
+    control_name::Union{Symbol, Nothing}=nothing,
     kwargs...
 )
+    # Auto-detect control name if not specified
+    if isnothing(control_name)
+        # Try :u first, then :a for backward compatibility
+        if :u ∈ traj.names
+            control_name = :u
+        elseif :a ∈ traj.names
+            control_name = :a
+        else
+            error("Could not find control field :u or :a in trajectory. Please specify control_name explicitly.")
+        end
+    end
+    
     ρ_goal = iso_vec_to_density(traj.goal[state_name])
     ρ_init = iso_vec_to_density(traj.initial[state_name])
     controls = traj[control_name]
@@ -653,9 +677,21 @@ function unitary_rollout_fidelity(
     traj::NamedTrajectory,
     sys::AbstractQuantumSystem;
     unitary_name::Symbol=:Ũ⃗,
-    drive_name::Symbol=:u,
+    drive_name::Union{Symbol, Nothing}=nothing,
     kwargs...
 )
+    # Auto-detect drive name if not specified
+    if isnothing(drive_name)
+        # Try :u first, then :a for backward compatibility
+        if :u ∈ traj.names
+            drive_name = :u
+        elseif :a ∈ traj.names
+            drive_name = :a
+        else
+            error("Could not find drive field :u or :a in trajectory. Please specify drive_name explicitly.")
+        end
+    end
+
     Ũ⃗_init = traj.initial[unitary_name]
     Ũ⃗_goal = traj.goal[unitary_name]
     controls = traj[drive_name]
