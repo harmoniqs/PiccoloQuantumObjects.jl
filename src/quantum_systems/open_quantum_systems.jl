@@ -37,7 +37,7 @@ end
         H_drift::AbstractMatrix{<:Number},
         H_drives::AbstractVector{<:AbstractMatrix{<:Number}},
         T_max::Float64,
-        drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
+        drive_bounds::DriveBounds;
         dissipation_operators::AbstractVector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[]
     )
     OpenQuantumSystem(
@@ -48,13 +48,13 @@ end
     OpenQuantumSystem(
         H_drives::Vector{<:AbstractMatrix{<:Number}},
         T_max::Float64, 
-        drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
+        drive_bounds::DriveBounds;
         dissipation_operators::AbstractVector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[]
     )
     OpenQuantumSystem(
         H::Function, 
         T_max::Float64,
-        drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
+        drive_bounds::DriveBounds;
         dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[]
     )
     OpenQuantumSystem(
@@ -65,17 +65,20 @@ end
 Constructs an OpenQuantumSystem object from the drift and drive Hamiltonian terms and
 dissipation operators. All constructors require T_max (maximum time) and drive_bounds
 (control bounds for each drive) to be explicitly specified.
+
+# Drive Bounds
+The `drive_bounds` parameter can be:
+- Tuples `(lower, upper)` for asymmetric bounds
+- Scalars which are interpreted as symmetric bounds `(-value, value)`
 """
 function OpenQuantumSystem(
     H_drift::AbstractMatrix{<:Number},
     H_drives::Vector{<:AbstractMatrix{<:Number}},
     T_max::Float64,
-    drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
+    drive_bounds::DriveBounds;
     dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[]
 )
-    drive_bounds = [
-        b isa Tuple ? b : (-b, b) for b in drive_bounds
-    ]
+    drive_bounds = normalize_drive_bounds(drive_bounds)
 
     H_drift_sparse = sparse(H_drift)
     𝒢_drift = Isomorphisms.G(Isomorphisms.ad_vec(H_drift_sparse))
@@ -118,7 +121,7 @@ end
 function OpenQuantumSystem(
     H_drives::Vector{<:AbstractMatrix{ℂ}}, 
     T_max::Float64, 
-    drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
+    drive_bounds::DriveBounds;
     dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[]
 ) where ℂ <: Number
     @assert !isempty(H_drives) "At least one drive is required"
@@ -138,13 +141,11 @@ end
 function OpenQuantumSystem(
     H::F, 
     T_max::Float64,
-    drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
+    drive_bounds::DriveBounds;
     dissipation_operators::Vector{<:AbstractMatrix{ℂ}}=Matrix{ComplexF64}[]
 ) where {F <: Function, ℂ <: Number}
     
-    drive_bounds = [
-        b isa Tuple ? b : (-b, b) for b in drive_bounds
-    ]
+    drive_bounds = normalize_drive_bounds(drive_bounds)
 
     n_drives = length(drive_bounds)
     
@@ -256,4 +257,35 @@ end
     @test get_drives(system) == H_drives
     @test system.dissipation_operators == dissipation_operators
 
+end
+
+@testitem "OpenQuantumSystem drive_bounds conversion" begin
+    using PiccoloQuantumObjects: PAULIS, OpenQuantumSystem
+
+    # Test scalar bounds are converted to symmetric tuples
+    H_drift = PAULIS.Z
+    H_drives = [PAULIS.X, PAULIS.Y]
+    dissipation_operators = [PAULIS.Z]
+    T_max = 1.0
+
+    # Test with scalar bounds
+    sys_scalar = OpenQuantumSystem(H_drift, H_drives, T_max, [1.0, 1.5], 
+                                   dissipation_operators=dissipation_operators)
+    @test sys_scalar.drive_bounds == [(-1.0, 1.0), (-1.5, 1.5)]
+
+    # Test with tuple bounds
+    sys_tuple = OpenQuantumSystem(H_drift, H_drives, T_max, [(-0.5, 1.0), (-1.5, 0.5)],
+                                  dissipation_operators=dissipation_operators)
+    @test sys_tuple.drive_bounds == [(-0.5, 1.0), (-1.5, 0.5)]
+
+    # Test that mixed bounds (scalars and tuples) are rejected
+    mixed_bounds = Union{Float64, Tuple{Float64,Float64}}[1.0, (-0.5, 1.5)]
+    @test_throws ErrorException OpenQuantumSystem(H_drift, H_drives, T_max, mixed_bounds,
+                                  dissipation_operators=dissipation_operators)
+
+    # Test with function-based Hamiltonian
+    H = (u, t) -> H_drift + sum(u .* H_drives)
+    sys_func = OpenQuantumSystem(H, T_max, [0.8, 1.2],
+                                 dissipation_operators=dissipation_operators)
+    @test sys_func.drive_bounds == [(-0.8, 0.8), (-1.2, 1.2)]
 end
