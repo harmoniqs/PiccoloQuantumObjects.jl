@@ -140,7 +140,7 @@ end
         H_drives::AbstractVector{<:AbstractMatrix},
         subsystems::AbstractVector{<:QuantumSystem},
         T_max::Float64,
-        drive_bounds::Vector
+        drive_bounds::DriveBounds
     )
 
 Construct a CompositeQuantumSystem with coupling drift and drive terms.
@@ -150,15 +150,17 @@ Construct a CompositeQuantumSystem with coupling drift and drive terms.
 - `H_drives::AbstractVector{<:AbstractMatrix}`: Coupling drive Hamiltonians
 - `subsystems::AbstractVector{<:QuantumSystem}`: Vector of subsystems to compose
 - `T_max::Float64`: Maximum evolution time
-- `drive_bounds::Vector`: Drive bounds for the coupling drives (subsystem bounds are inherited)
+- `drive_bounds::DriveBounds`: Drive bounds for the coupling drives (subsystem bounds are inherited). Can be:
+  - Tuples `(lower, upper)` for asymmetric bounds
+  - Scalars which are interpreted as symmetric bounds `(-value, value)`
 
 The total drift includes both the coupling drift and all subsystem drifts (automatically lifted).
 The total drives include coupling drives followed by all subsystem drives (automatically lifted).
 
 # Example
 ```julia
-sys1 = QuantumSystem(PAULIS[:Z], [PAULIS[:X]], 10.0, [(-1.0, 1.0)])
-sys2 = QuantumSystem([PAULIS[:Y]], 10.0, [(-1.0, 1.0)])
+sys1 = QuantumSystem(PAULIS[:Z], [PAULIS[:X]], 10.0, [1.0])
+sys2 = QuantumSystem([PAULIS[:Y]], 10.0, [1.0])
 g12 = 0.1 * kron(PAULIS[:X], PAULIS[:X])  # coupling drift
 csys = CompositeQuantumSystem(g12, Matrix{ComplexF64}[], [sys1, sys2], 10.0, Float64[])
 ```
@@ -168,12 +170,10 @@ function CompositeQuantumSystem(
     H_drives::AbstractVector{<:AbstractMatrix{<:Number}},
     subsystems::AbstractVector{<:QuantumSystem},
     T_max::Float64,
-    drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}
+    drive_bounds::DriveBounds
 )
     # Normalize drive bounds to tuples
-    drive_bounds = [
-        b isa Tuple ? b : (-b, b) for b in drive_bounds
-    ]
+    drive_bounds = normalize_drive_bounds(drive_bounds)
     
     subsystem_levels = [sys.levels for sys ∈ subsystems]
     levels = prod(subsystem_levels)
@@ -222,24 +222,32 @@ end
         H_drives::AbstractVector{<:AbstractMatrix},
         subsystems::AbstractVector{<:QuantumSystem},
         T_max::Float64,
-        drive_bounds::Vector
+        drive_bounds::DriveBounds
     )
 
 Convenience constructor for a composite system with coupling drives but no coupling drift.
+
+# Arguments
+- `H_drives::AbstractVector{<:AbstractMatrix}`: Coupling drive Hamiltonians
+- `subsystems::AbstractVector{<:QuantumSystem}`: Vector of subsystems to compose
+- `T_max::Float64`: Maximum evolution time
+- `drive_bounds::DriveBounds`: Drive bounds for the coupling drives. Can be:
+  - Tuples `(lower, upper)` for asymmetric bounds
+  - Scalars which are interpreted as symmetric bounds `(-value, value)`
 
 # Example
 ```julia
 sys1 = QuantumSystem([PAULIS[:X]], 10.0, [1.0])
 sys2 = QuantumSystem([PAULIS[:Y]], 10.0, [1.0])
 g12 = 0.1 * kron(PAULIS[:X], PAULIS[:X])  # coupling drive
-csys = CompositeQuantumSystem([g12], [sys1, sys2], 10.0, [(-1.0, 1.0)])
+csys = CompositeQuantumSystem([g12], [sys1, sys2], 10.0, [1.0])  # symmetric bound
 ```
 """
 function CompositeQuantumSystem(
     H_drives::AbstractVector{<:AbstractMatrix{T}},
     subsystems::AbstractVector{<:QuantumSystem},
     T_max::Float64,
-    drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}
+    drive_bounds::DriveBounds
 ) where T <: Number
     @assert !isempty(H_drives) "At least one drive is required"
     return CompositeQuantumSystem(
@@ -256,10 +264,18 @@ end
         H_drift::AbstractMatrix,
         subsystems::AbstractVector{<:QuantumSystem},
         T_max::Float64,
-        drive_bounds::Vector
+        drive_bounds::DriveBounds
     )
 
 Convenience constructor for a composite system with coupling drift but no coupling drives.
+
+# Arguments
+- `H_drift::AbstractMatrix`: Coupling drift Hamiltonian
+- `subsystems::AbstractVector{<:QuantumSystem}`: Vector of subsystems to compose
+- `T_max::Float64`: Maximum evolution time
+- `drive_bounds::DriveBounds`: Drive bounds for the coupling drives (typically empty). Can be:
+  - Tuples `(lower, upper)` for asymmetric bounds
+  - Scalars which are interpreted as symmetric bounds `(-value, value)`
 
 # Example
 ```julia
@@ -273,7 +289,7 @@ function CompositeQuantumSystem(
     H_drift::AbstractMatrix{T},
     subsystems::AbstractVector{<:QuantumSystem},
     T_max::Float64,
-    drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}
+    drive_bounds::DriveBounds
 ) where T <: Number
     return CompositeQuantumSystem(
         H_drift, 
@@ -288,13 +304,20 @@ end
     CompositeQuantumSystem(
         subsystems::AbstractVector{<:QuantumSystem},
         T_max::Float64,
-        drive_bounds::Vector
+        drive_bounds::DriveBounds
     )
 
 Convenience constructor for a composite system with no coupling terms (neither drift nor drives).
 
 Use this when you have independent subsystems that you want to represent in a single
 composite space, but without any direct coupling between them.
+
+# Arguments
+- `subsystems::AbstractVector{<:QuantumSystem}`: Vector of subsystems to compose
+- `T_max::Float64`: Maximum evolution time
+- `drive_bounds::DriveBounds`: Drive bounds for the coupling drives (typically empty). Can be:
+  - Tuples `(lower, upper)` for asymmetric bounds
+  - Scalars which are interpreted as symmetric bounds `(-value, value)`
 
 # Example
 ```julia
@@ -306,7 +329,7 @@ csys = CompositeQuantumSystem([sys1, sys2], 10.0, Float64[])
 function CompositeQuantumSystem(
     subsystems::AbstractVector{<:QuantumSystem},
     T_max::Float64,
-    drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}
+    drive_bounds::DriveBounds
 )
     @assert !isempty(subsystems) "At least one subsystem is required"
     T = eltype(get_drift(subsystems[1]))
@@ -424,4 +447,32 @@ end
     @test csys.subsystems == subsystems
     @test csys.subsystem_levels == subsystem_levels
     @test get_drift(csys) ≈ lift_operator(PAULIS[:Z], 1, subsystem_levels)
+end
+
+@testitem "CompositeQuantumSystem drive_bounds conversion" begin
+    using LinearAlgebra
+    using PiccoloQuantumObjects: PAULIS, QuantumSystem, CompositeQuantumSystem
+
+    # Test scalar bounds are converted to symmetric tuples
+    sys1 = QuantumSystem([PAULIS[:X]], 1.0, [1.0])
+    sys2 = QuantumSystem([PAULIS[:Y]], 1.0, [1.0])
+    subsystems = [sys1, sys2]
+    g12 = 0.1 * kron(PAULIS[:X], PAULIS[:X])
+    
+    # Test with scalar bounds for coupling drives
+    csys_scalar = CompositeQuantumSystem([g12], subsystems, 1.0, [0.5])
+    # The system should have subsystem bounds appended automatically
+    # First drive is the coupling drive with bound (-0.5, 0.5)
+    @test csys_scalar.drive_bounds[1] == (-0.5, 0.5)
+    
+    # Test with tuple bounds for coupling drives
+    csys_tuple = CompositeQuantumSystem([g12], subsystems, 1.0, [(-0.3, 0.7)])
+    @test csys_tuple.drive_bounds[1] == (-0.3, 0.7)
+    
+    # Test with mixed bounds (scalars and tuples) - requires explicit type annotation
+    g23 = 0.2 * kron(PAULIS[:Y], PAULIS[:Y])
+    mixed_bounds = Union{Float64, Tuple{Float64,Float64}}[0.5, (-0.2, 0.8)]
+    csys_mixed = CompositeQuantumSystem([g12, g23], subsystems, 1.0, mixed_bounds)
+    @test csys_mixed.drive_bounds[1] == (-0.5, 0.5)
+    @test csys_mixed.drive_bounds[2] == (-0.2, 0.8)
 end

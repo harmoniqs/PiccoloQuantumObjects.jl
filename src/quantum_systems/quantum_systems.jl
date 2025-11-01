@@ -32,30 +32,32 @@ struct QuantumSystem{F1<:Function, F2<:Function} <: AbstractQuantumSystem
 end
 
 """
-    QuantumSystem(H::Function, T_max::Float64, drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}})
+    QuantumSystem(H::Function, T_max::Float64, drive_bounds::DriveBounds)
 
 Construct a QuantumSystem from a Hamiltonian function.
 
 # Arguments
 - `H::Function`: Hamiltonian function with signature (u, t) -> H(u, t) where u is the control vector and t is time
 - `T_max::Float64`: Maximum evolution time
-- `drive_bounds::Vector`: Drive amplitude bounds. Can be tuples `(lower, upper)` or scalars (interpreted as `(-bound, bound)`)
+- `drive_bounds::DriveBounds`: Drive amplitude bounds for each control. Can be:
+  - Tuples `(lower, upper)` for asymmetric bounds
+  - Scalars which are interpreted as symmetric bounds `(-value, value)`
 
 # Example
 ```julia
 # Define a time-dependent Hamiltonian
 H = (u, t) -> PAULIS[:Z] + u[1] * PAULIS[:X] + u[2] * PAULIS[:Y]
-sys = QuantumSystem(H, 10.0, [(-1.0, 1.0), (-1.0, 1.0)])
+# Using symmetric bounds (scalars)
+sys = QuantumSystem(H, 10.0, [1.0, 1.0])
+# Equivalent to: [(-1.0, 1.0), (-1.0, 1.0)]
 ```
 """
 function QuantumSystem(
     H::Function,
     T_max::Float64,
-    drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}
+    drive_bounds::DriveBounds
 )
-    drive_bounds = [
-        b isa Tuple ? b : (-b, b) for b in drive_bounds
-    ]
+    drive_bounds = normalize_drive_bounds(drive_bounds)
 
     # Extract drift by evaluating with zero controls
     H_drift = H(zeros(length(drive_bounds)), 0.0)
@@ -78,7 +80,7 @@ end
         H_drift::AbstractMatrix{<:Number},
         H_drives::Vector{<:AbstractMatrix{<:Number}},
         T_max::Float64,
-        drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}
+        drive_bounds::DriveBounds
     )
 
 Construct a QuantumSystem from drift and drive Hamiltonian terms.
@@ -87,7 +89,9 @@ Construct a QuantumSystem from drift and drive Hamiltonian terms.
 - `H_drift::AbstractMatrix`: The drift (time-independent) Hamiltonian
 - `H_drives::Vector{<:AbstractMatrix}`: Vector of drive Hamiltonians, one for each control
 - `T_max::Float64`: Maximum evolution time
-- `drive_bounds::Vector`: Drive amplitude bounds for each control. Can be tuples `(lower, upper)` or scalars
+- `drive_bounds::DriveBounds`: Drive amplitude bounds for each control. Can be:
+  - Tuples `(lower, upper)` for asymmetric bounds
+  - Scalars which are interpreted as symmetric bounds `(-value, value)`
 
 The resulting Hamiltonian is: H(u, t) = H_drift + Σᵢ uᵢ * H_drives[i]
 
@@ -97,7 +101,7 @@ sys = QuantumSystem(
     PAULIS[:Z],                    # drift
     [PAULIS[:X], PAULIS[:Y]],      # drives
     10.0,                          # T_max
-    [(-1.0, 1.0), (-1.0, 1.0)]     # bounds
+    [1.0, 1.0]                     # symmetric bounds: [(-1.0, 1.0), (-1.0, 1.0)]
 )
 ```
 """
@@ -105,11 +109,9 @@ function QuantumSystem(
     H_drift::AbstractMatrix{<:Number},
     H_drives::Vector{<:AbstractMatrix{<:Number}},
     T_max::Float64,
-    drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}
+    drive_bounds::DriveBounds
 )
-    drive_bounds = [
-        b isa Tuple ? b : (-b, b) for b in drive_bounds
-    ]
+    drive_bounds = normalize_drive_bounds(drive_bounds)
 
     H_drift = sparse(H_drift)
     G_drift = sparse(Isomorphisms.G(H_drift))
@@ -142,16 +144,25 @@ end
 
 # Convenience constructors
 """
-    QuantumSystem(H_drives::Vector{<:AbstractMatrix}, T_max::Float64, drive_bounds::Vector)
+    QuantumSystem(H_drives::Vector{<:AbstractMatrix}, T_max::Float64, drive_bounds::DriveBounds)
 
 Convenience constructor for a system with no drift Hamiltonian (H_drift = 0).
 
+# Arguments
+- `H_drives::Vector{<:AbstractMatrix}`: Vector of drive Hamiltonians
+- `T_max::Float64`: Maximum evolution time
+- `drive_bounds::DriveBounds`: Drive amplitude bounds for each control. Can be:
+  - Tuples `(lower, upper)` for asymmetric bounds
+  - Scalars which are interpreted as symmetric bounds `(-value, value)`
+
 # Example
 ```julia
+# Using scalars for symmetric bounds
 sys = QuantumSystem([PAULIS[:X], PAULIS[:Y]], 10.0, [1.0, 1.0])
+# Equivalent to: drive_bounds = [(-1.0, 1.0), (-1.0, 1.0)]
 ```
 """
-function QuantumSystem(H_drives::Vector{<:AbstractMatrix{ℂ}}, T_max::Float64, drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}) where ℂ <: Number
+function QuantumSystem(H_drives::Vector{<:AbstractMatrix{ℂ}}, T_max::Float64, drive_bounds::DriveBounds) where ℂ <: Number
     @assert !isempty(H_drives) "At least one drive is required"
     return QuantumSystem(spzeros(ℂ, size(H_drives[1])), H_drives, T_max, drive_bounds)
 end
@@ -259,4 +270,31 @@ end
     @test system isa QuantumSystem
     @test get_drift(system) == zeros(2, 2)
     @test get_drives(system) == H_drives 
+end
+
+@testitem "QuantumSystem drive_bounds conversion" begin
+    using PiccoloQuantumObjects: PAULIS, QuantumSystem
+
+    # Test scalar bounds are converted to symmetric tuples
+    H_drift = PAULIS.Z
+    H_drives = [PAULIS.X, PAULIS.Y]
+    T_max = 1.0
+
+    # Test with scalar bounds
+    sys_scalar = QuantumSystem(H_drift, H_drives, T_max, [1.0, 1.5])
+    @test sys_scalar.drive_bounds == [(-1.0, 1.0), (-1.5, 1.5)]
+
+    # Test with tuple bounds
+    sys_tuple = QuantumSystem(H_drift, H_drives, T_max, [(-0.5, 1.0), (-1.5, 0.5)])
+    @test sys_tuple.drive_bounds == [(-0.5, 1.0), (-1.5, 0.5)]
+
+    # Test with mixed bounds (scalars and tuples) - requires explicit type annotation
+    mixed_bounds = Union{Float64, Tuple{Float64,Float64}}[1.0, (-0.5, 1.5)]
+    sys_mixed = QuantumSystem(H_drift, H_drives, T_max, mixed_bounds)
+    @test sys_mixed.drive_bounds == [(-1.0, 1.0), (-0.5, 1.5)]
+
+    # Test with function-based Hamiltonian
+    H = (u, t) -> H_drift + sum(u .* H_drives)
+    sys_func = QuantumSystem(H, T_max, [0.8, 1.2])
+    @test sys_func.drive_bounds == [(-0.8, 0.8), (-1.2, 1.2)]
 end
