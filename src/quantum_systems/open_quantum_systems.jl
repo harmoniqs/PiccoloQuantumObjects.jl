@@ -278,10 +278,11 @@ end
                                   dissipation_operators=dissipation_operators)
     @test sys_tuple.drive_bounds == [(-0.5, 1.0), (-1.5, 0.5)]
 
-    # Test that mixed bounds (scalars and tuples) are rejected
+    # Test with mixed bounds (scalars and tuples) - requires explicit type annotation
     mixed_bounds = Union{Float64, Tuple{Float64,Float64}}[1.0, (-0.5, 1.5)]
-    @test_throws ErrorException OpenQuantumSystem(H_drift, H_drives, T_max, mixed_bounds,
+    sys_mixed = OpenQuantumSystem(H_drift, H_drives, T_max, mixed_bounds,
                                   dissipation_operators=dissipation_operators)
+    @test sys_mixed.drive_bounds == [(-1.0, 1.0), (-0.5, 1.5)]
 
     # Test with function-based Hamiltonian
     H = (u, t) -> H_drift + sum(u .* H_drives)

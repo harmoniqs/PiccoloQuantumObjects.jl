@@ -469,8 +469,10 @@ end
     csys_tuple = CompositeQuantumSystem([g12], subsystems, 1.0, [(-0.3, 0.7)])
     @test csys_tuple.drive_bounds[1] == (-0.3, 0.7)
     
-    # Test that mixed bounds (scalars and tuples) are rejected
+    # Test with mixed bounds (scalars and tuples) - requires explicit type annotation
     g23 = 0.2 * kron(PAULIS[:Y], PAULIS[:Y])
     mixed_bounds = Union{Float64, Tuple{Float64,Float64}}[0.5, (-0.2, 0.8)]
-    @test_throws ErrorException CompositeQuantumSystem([g12, g23], subsystems, 1.0, mixed_bounds)
+    csys_mixed = CompositeQuantumSystem([g12, g23], subsystems, 1.0, mixed_bounds)
+    @test csys_mixed.drive_bounds[1] == (-0.5, 0.5)
+    @test csys_mixed.drive_bounds[2] == (-0.2, 0.8)
 end
