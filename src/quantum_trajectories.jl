@@ -19,7 +19,7 @@ export AbstractQuantumTrajectory
 export UnitaryTrajectory
 export KetTrajectory
 export DensityTrajectory
-export trajectory, system, goal, state_name, control_name, state, controls
+export get_trajectory, get_system, get_goal, get_state_name, get_control_name, get_state, get_controls
 export unitary_geodesic, unitary_linear_interpolation, linear_interpolation
 
 using NamedTrajectories
@@ -167,24 +167,24 @@ end
 Abstract type for quantum trajectories that wrap a `NamedTrajectory` with quantum-specific metadata.
 
 Subtypes should implement:
-- `trajectory(qtraj)`: Return the underlying `NamedTrajectory`
-- `system(qtraj)`: Return the quantum system
-- `state_name(qtraj)`: Return the state variable name
-- `control_name(qtraj)`: Return the control variable name
-- `goal(qtraj)`: Return the goal state/operator
+- `get_trajectory(qtraj)`: Return the underlying `NamedTrajectory`
+- `get_system(qtraj)`: Return the quantum system
+- `get_state_name(qtraj)`: Return the state variable name
+- `get_control_name(qtraj)`: Return the control variable name
+- `get_goal(qtraj)`: Return the goal state/operator
 """
 abstract type AbstractQuantumTrajectory end
 
 # Accessor functions
-trajectory(qtraj::AbstractQuantumTrajectory) = qtraj.trajectory
-system(qtraj::AbstractQuantumTrajectory) = qtraj.system
-state_name(qtraj::AbstractQuantumTrajectory) = qtraj.state_name
-control_name(qtraj::AbstractQuantumTrajectory) = qtraj.control_name
-goal(qtraj::AbstractQuantumTrajectory) = qtraj.goal
+get_trajectory(qtraj::AbstractQuantumTrajectory) = qtraj.trajectory
+get_system(qtraj::AbstractQuantumTrajectory) = qtraj.system
+get_state_name(qtraj::AbstractQuantumTrajectory) = qtraj.state_name
+get_control_name(qtraj::AbstractQuantumTrajectory) = qtraj.control_name
+get_goal(qtraj::AbstractQuantumTrajectory) = qtraj.goal
 
 # Delegate common operations to underlying NamedTrajectory
-Base.getindex(qtraj::AbstractQuantumTrajectory, key) = getindex(trajectory(qtraj), key)
-Base.setindex!(qtraj::AbstractQuantumTrajectory, value, key) = setindex!(trajectory(qtraj), value, key)
+Base.getindex(qtraj::AbstractQuantumTrajectory, key) = getindex(get_trajectory(qtraj), key)
+Base.setindex!(qtraj::AbstractQuantumTrajectory, value, key) = setindex!(get_trajectory(qtraj), value, key)
 
 # Delegate property access to underlying NamedTrajectory, except for AbstractQuantumTrajectory's own fields
 function Base.getproperty(qtraj::AbstractQuantumTrajectory, symb::Symbol)
@@ -205,8 +205,12 @@ function Base.propertynames(qtraj::AbstractQuantumTrajectory)
 end
 
 # Convenience accessors
-state(qtraj::AbstractQuantumTrajectory) = trajectory(qtraj)[state_name(qtraj)]
-controls(qtraj::AbstractQuantumTrajectory) = trajectory(qtraj)[control_name(qtraj)]
+state(qtraj::AbstractQuantumTrajectory) = get_trajectory(qtraj)[get_state_name(qtraj)]
+controls(qtraj::AbstractQuantumTrajectory) = get_trajectory(qtraj)[get_control_name(qtraj)]
+
+# New get_* versions
+get_state(qtraj::AbstractQuantumTrajectory) = state(qtraj)
+get_controls(qtraj::AbstractQuantumTrajectory) = controls(qtraj)
 
 """
     UnitaryTrajectory <: AbstractQuantumTrajectory
@@ -232,13 +236,22 @@ struct UnitaryTrajectory <: AbstractQuantumTrajectory
         U_goal::AbstractMatrix{<:Number},
         N::Int;
         U_init::AbstractMatrix{<:Number}=Matrix{ComplexF64}(I(size(sys.H_drift, 1))),
-        Δt_min::Float64=sys.T_max / (2 * (N-1)),
-        Δt_max::Float64=2 * sys.T_max / (N-1),
+        Δt_min::Union{Float64, Nothing}=nothing,
+        Δt_max::Union{Float64, Nothing}=nothing,
+        Δt_bounds::Union{Tuple{Float64, Float64}, Nothing}=nothing,
         free_time::Bool=true,
         geodesic::Bool=true
     )
         Δt = sys.T_max / (N - 1)
         n_drives = sys.n_drives
+        
+        # Handle Δt_bounds: prioritize Δt_bounds tuple if provided, else use Δt_min/Δt_max
+        if !isnothing(Δt_bounds)
+            _Δt_min, _Δt_max = Δt_bounds
+        else
+            _Δt_min = isnothing(Δt_min) ? Δt / 2 : Δt_min
+            _Δt_max = isnothing(Δt_max) ? 2 * Δt : Δt_max
+        end
         
         # Initialize unitary trajectory
         if geodesic
@@ -275,10 +288,10 @@ struct UnitaryTrajectory <: AbstractQuantumTrajectory
         # Bounds - convert drive_bounds from Vector{Tuple} to Tuple of Vectors
         u_lower = [sys.drive_bounds[i][1] for i in 1:n_drives]
         u_upper = [sys.drive_bounds[i][2] for i in 1:n_drives]
-        Δt_bounds = free_time ? (Δt_min, Δt_max) : (Δt, Δt)
+        _Δt_bounds = free_time ? (_Δt_min, _Δt_max) : (Δt, Δt)
         bounds = (
             u = (u_lower, u_upper),
-            Δt = Δt_bounds
+            Δt = _Δt_bounds
         )
         
         # Build component data
@@ -342,8 +355,9 @@ struct KetTrajectory <: AbstractQuantumTrajectory
         N::Int;
         state_name::Symbol=:ψ̃,
         state_names::Union{AbstractVector{<:Symbol}, Nothing}=nothing,
-        Δt_min::Float64=sys.T_max / (2 * (N-1)),
-        Δt_max::Float64=2 * sys.T_max / (N-1),
+        Δt_min::Union{Float64, Nothing}=nothing,
+        Δt_max::Union{Float64, Nothing}=nothing,
+        Δt_bounds::Union{Tuple{Float64, Float64}, Nothing}=nothing,
         free_time::Bool=true
     )
         @assert length(ψ_inits) == length(ψ_goals) "ψ_inits and ψ_goals must have the same length"
@@ -351,6 +365,14 @@ struct KetTrajectory <: AbstractQuantumTrajectory
         Δt = sys.T_max / (N - 1)
         n_drives = sys.n_drives
         n_states = length(ψ_inits)
+        
+        # Handle Δt_bounds: prioritize Δt_bounds tuple if provided, else use Δt_min/Δt_max
+        if !isnothing(Δt_bounds)
+            _Δt_min, _Δt_max = Δt_bounds
+        else
+            _Δt_min = isnothing(Δt_min) ? Δt / 2 : Δt_min
+            _Δt_max = isnothing(Δt_max) ? 2 * Δt : Δt_max
+        end
         
         # Generate state names if not provided
         if isnothing(state_names)
@@ -397,10 +419,10 @@ struct KetTrajectory <: AbstractQuantumTrajectory
         # Bounds - convert drive_bounds from Vector{Tuple} to Tuple of Vectors
         u_lower = [sys.drive_bounds[i][1] for i in 1:n_drives]
         u_upper = [sys.drive_bounds[i][2] for i in 1:n_drives]
-        Δt_bounds = free_time ? (Δt_min, Δt_max) : (Δt, Δt)
+        _Δt_bounds = free_time ? (_Δt_min, _Δt_max) : (Δt, Δt)
         bounds = (
             u = (u_lower, u_upper),
-            Δt = Δt_bounds
+            Δt = _Δt_bounds
         )
         
         # Build component data
@@ -427,7 +449,7 @@ struct KetTrajectory <: AbstractQuantumTrajectory
 end
 
 # Special accessor for KetTrajectory
-goal(qtraj::KetTrajectory) = length(qtraj.goals) == 1 ? qtraj.goals[1] : qtraj.goals
+get_goal(qtraj::KetTrajectory) = length(qtraj.goals) == 1 ? qtraj.goals[1] : qtraj.goals
 
 """
     DensityTrajectory <: AbstractQuantumTrajectory
@@ -453,12 +475,21 @@ struct DensityTrajectory <: AbstractQuantumTrajectory
         ρ_init::AbstractMatrix,
         ρ_goal::AbstractMatrix,
         N::Int;
-        Δt_min::Float64=sys.T_max / (2 * (N-1)),
-        Δt_max::Float64=2 * sys.T_max / (N-1),
+        Δt_min::Union{Float64, Nothing}=nothing,
+        Δt_max::Union{Float64, Nothing}=nothing,
+        Δt_bounds::Union{Tuple{Float64, Float64}, Nothing}=nothing,
         free_time::Bool=true
     )
         Δt = sys.T_max / (N - 1)
         n_drives = sys.n_drives
+        
+        # Handle Δt_bounds: prioritize Δt_bounds tuple if provided, else use Δt_min/Δt_max
+        if !isnothing(Δt_bounds)
+            _Δt_min, _Δt_max = Δt_bounds
+        else
+            _Δt_min = isnothing(Δt_min) ? Δt / 2 : Δt_min
+            _Δt_max = isnothing(Δt_max) ? 2 * Δt : Δt_max
+        end
         
         # Convert to iso representation
         ρ⃗̃_init = density_to_iso_vec(ρ_init)
@@ -491,10 +522,10 @@ struct DensityTrajectory <: AbstractQuantumTrajectory
         # Bounds - convert drive_bounds from Vector{Tuple} to Tuple of Vectors
         u_lower = [sys.drive_bounds[i][1] for i in 1:n_drives]
         u_upper = [sys.drive_bounds[i][2] for i in 1:n_drives]
-        Δt_bounds = free_time ? (Δt_min, Δt_max) : (Δt, Δt)
+        _Δt_bounds = free_time ? (_Δt_min, _Δt_max) : (Δt, Δt)
         bounds = (
             u = (u_lower, u_upper),
-            Δt = Δt_bounds
+            Δt = _Δt_bounds
         )
         
         # Build component data
@@ -545,10 +576,10 @@ end
     @test size(qtraj[:Ũ⃗], 2) == N
     @test size(qtraj[:u], 2) == N
     @test size(qtraj[:u], 1) == 2  # 2 drives
-    @test system(qtraj) === sys
-    @test goal(qtraj) === U_goal
-    @test state_name(qtraj) == :Ũ⃗
-    @test control_name(qtraj) == :u
+    @test get_system(qtraj) === sys
+    @test get_goal(qtraj) === U_goal
+    @test get_state_name(qtraj) == :Ũ⃗
+    @test get_control_name(qtraj) == :u
     
     # Test with custom initial unitary
     U_init = GATES[:I]
@@ -601,10 +632,10 @@ end
     @test size(qtraj[:ψ̃], 2) == N
     @test size(qtraj[:u], 2) == N
     @test size(qtraj[:u], 1) == 2  # 2 drives
-    @test system(qtraj) === sys
-    @test goal(qtraj) == ψ_goal
-    @test state_name(qtraj) == :ψ̃
-    @test control_name(qtraj) == :u
+    @test get_system(qtraj) === sys
+    @test get_goal(qtraj) == ψ_goal
+    @test get_state_name(qtraj) == :ψ̃
+    @test get_control_name(qtraj) == :u
     
     # Test with fixed time
     qtraj3 = KetTrajectory(sys, ψ_init, ψ_goal, N; free_time=false)
@@ -627,7 +658,7 @@ end
     @test size(qtraj5[:ψ̃1], 2) == N
     @test size(qtraj5[:ψ̃2], 2) == N
     @test size(qtraj5[:u], 2) == N
-    @test goal(qtraj5) == [ψ_goal, ψ2_goal]  # Multiple goals
+    @test get_goal(qtraj5) == [ψ_goal, ψ2_goal]  # Multiple goals
     
     # Test with custom state names
     qtraj6 = KetTrajectory(sys, [ψ_init, ψ2_init], [ψ_goal, ψ2_goal], N;
@@ -636,7 +667,7 @@ end
     @test qtraj6 isa KetTrajectory
     @test size(qtraj6[:ψ̃_a], 2) == N
     @test size(qtraj6[:ψ̃_b], 2) == N
-    @test state_name(qtraj6) == :ψ̃_a  # First state name
+    @test get_state_name(qtraj6) == :ψ̃_a  # First state name
     
     # Test that time is NOT stored for non-time-dependent systems
     @test !haskey(qtraj.components, :t)
@@ -665,10 +696,10 @@ end
     @test size(qtraj[:ρ⃗̃], 2) == N
     @test size(qtraj[:u], 2) == N
     @test size(qtraj[:u], 1) == 2  # 2 drives
-    @test system(qtraj) === sys
-    @test goal(qtraj) == ρ_goal
-    @test state_name(qtraj) == :ρ⃗̃
-    @test control_name(qtraj) == :u
+    @test get_system(qtraj) === sys
+    @test get_goal(qtraj) == ρ_goal
+    @test get_state_name(qtraj) == :ρ⃗̃
+    @test get_control_name(qtraj) == :u
     
     # Test with fixed time
     qtraj3 = DensityTrajectory(sys, ρ_init, ρ_goal, N; free_time=false)
