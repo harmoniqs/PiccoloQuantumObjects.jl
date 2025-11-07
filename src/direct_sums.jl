@@ -79,25 +79,38 @@ direct_sum(systems::AbstractVector{<:QuantumSystem}) = reduce(direct_sum, system
 
 @testitem "Test matrix direct sum" begin
     using SparseArrays
-    A = [1 2; 3 4]
-    B = [5 6; 7 8]
-    @test direct_sum(A, B) == [1 2 0 0; 3 4 0 0; 0 0 5 6; 0 0 7 8]
+    using LinearAlgebra
+    
+    # Test with Hermitian matrices (valid Hamiltonians)
+    A = ComplexF64[1 1+im; 1-im 2]
+    B = ComplexF64[3 2-im; 2+im 4]
+    result = direct_sum(A, B)
+    @test result == ComplexF64[1 1+im 0 0; 1-im 2 0 0; 0 0 3 2-im; 0 0 2+im 4]
+    @test ishermitian(result)
 
-    A = sparse([1 2; 3 4])
-    B = sparse([5 6; 7 8])
-    @test direct_sum(A, B) == sparse([1 2 0 0; 3 4 0 0; 0 0 5 6; 0 0 7 8])
+    # Test with sparse Hermitian matrices
+    A = sparse(ComplexF64[1 1+im; 1-im 2])
+    B = sparse(ComplexF64[3 2-im; 2+im 4])
+    result = direct_sum(A, B)
+    @test result == sparse(ComplexF64[1 1+im 0 0; 1-im 2 0 0; 0 0 3 2-im; 0 0 2+im 4])
+    @test ishermitian(result)
 end
 
 
 
 @testitem "Test quantum system direct sum" begin
     using PiccoloQuantumObjects: PAULIS
+    using LinearAlgebra
     
-    # Test with no drives
-    sys1 = QuantumSystem(ComplexF64[1 2; 3 4], 1.0)
-    sys2 = QuantumSystem(ComplexF64[5 6; 7 8], 1.0)
+    # Test with no drives - use Hermitian matrices
+    H1 = ComplexF64[1 1+im; 1-im 2]
+    H2 = ComplexF64[3 2-im; 2+im 4]
+    sys1 = QuantumSystem(H1, 1.0)
+    sys2 = QuantumSystem(H2, 1.0)
     sys = direct_sum(sys1, sys2)
-    @test sys.H(Float64[], 0.0) == ComplexF64[1 2 0 0; 3 4 0 0; 0 0 5 6; 0 0 7 8]
+    result = sys.H(Float64[], 0.0)
+    @test result == ComplexF64[1 1+im 0 0; 1-im 2 0 0; 0 0 3 2-im; 0 0 2+im 4]
+    @test ishermitian(result)
     @test sys.n_drives == 0
     
     # Test with drives
@@ -112,6 +125,7 @@ end
     u = [0.5]
     H = sys.H(u, 0.0)
     @test size(H) == (4, 4)
+    @test ishermitian(H)
     
     # Test with multiple drives
     sys1 = QuantumSystem([PAULIS[:X], PAULIS[:Y]], 5.0, [1.0, 1.0])
@@ -126,7 +140,9 @@ end
     sys3 = QuantumSystem(PAULIS[:Y], 10.0)
     sys = direct_sum([sys1, sys2, sys3])
     @test sys.n_drives == 0
-    @test size(sys.H(Float64[], 0.0)) == (6, 6)
+    H = sys.H(Float64[], 0.0)
+    @test size(H) == (6, 6)
+    @test ishermitian(H)
 end
 
 @testitem "Test direct sum error handling" begin

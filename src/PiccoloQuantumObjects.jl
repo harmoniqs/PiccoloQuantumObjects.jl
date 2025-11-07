@@ -29,4 +29,7 @@ include("rollouts.jl")
 include("quantum_trajectories.jl")
 @reexport using .QuantumTrajectories
 
+include("quantum_system_templates/_quantum_system_templates.jl")
+@reexport using .QuantumSystemTemplates
+
 end
