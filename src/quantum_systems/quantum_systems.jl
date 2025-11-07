@@ -50,7 +50,9 @@ Construct a QuantumSystem from a Hamiltonian function.
 # Arguments
 - `H::Function`: Hamiltonian function with signature (u, t) -> H(u, t) where u is the control vector and t is time
 - `T_max::Float64`: Maximum evolution time
-- `drive_bounds::Vector`: Drive amplitude bounds. Can be tuples `(lower, upper)` or scalars (interpreted as `(-bound, bound)`)
+- `drive_bounds::DriveBounds`: Drive amplitude bounds for each control. Can be:
+  - Tuples `(lower, upper)` for asymmetric bounds
+  - Scalars which are interpreted as symmetric bounds `(-value, value)`
 
 # Keyword Arguments
 - `time_dependent::Bool=false`: Set to `true` if the Hamiltonian has explicit time dependence (e.g., cos(ωt) modulation)
@@ -68,9 +70,7 @@ function QuantumSystem(
     drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
     time_dependent::Bool=false
 )
-    drive_bounds = [
-        b isa Tuple ? b : (-b, b) for b in drive_bounds
-    ]
+    drive_bounds = normalize_drive_bounds(drive_bounds)
 
     n_drives = length(drive_bounds)
 
@@ -114,7 +114,9 @@ Construct a QuantumSystem from drift and drive Hamiltonian terms.
 - `H_drift::AbstractMatrix`: The drift (time-independent) Hamiltonian
 - `H_drives::Vector{<:AbstractMatrix}`: Vector of drive Hamiltonians, one for each control
 - `T_max::Float64`: Maximum evolution time
-- `drive_bounds::Vector`: Drive amplitude bounds for each control. Can be tuples `(lower, upper)` or scalars
+- `drive_bounds::DriveBounds`: Drive amplitude bounds for each control. Can be:
+  - Tuples `(lower, upper)` for asymmetric bounds
+  - Scalars which are interpreted as symmetric bounds `(-value, value)`
 
 # Keyword Arguments
 - `time_dependent::Bool=false`: Set to `true` if using time-dependent modulation (typically handled at a higher level)
@@ -127,7 +129,7 @@ sys = QuantumSystem(
     PAULIS[:Z],                    # drift
     [PAULIS[:X], PAULIS[:Y]],      # drives
     10.0,                          # T_max
-    [(-1.0, 1.0), (-1.0, 1.0)]     # bounds
+    [1.0, 1.0]                     # symmetric bounds: [(-1.0, 1.0), (-1.0, 1.0)]
 )
 ```
 """
@@ -186,9 +188,18 @@ end
 
 Convenience constructor for a system with no drift Hamiltonian (H_drift = 0).
 
+# Arguments
+- `H_drives::Vector{<:AbstractMatrix}`: Vector of drive Hamiltonians
+- `T_max::Float64`: Maximum evolution time
+- `drive_bounds::DriveBounds`: Drive amplitude bounds for each control. Can be:
+  - Tuples `(lower, upper)` for asymmetric bounds
+  - Scalars which are interpreted as symmetric bounds `(-value, value)`
+
 # Example
 ```julia
+# Using scalars for symmetric bounds
 sys = QuantumSystem([PAULIS[:X], PAULIS[:Y]], 10.0, [1.0, 1.0])
+# Equivalent to: drive_bounds = [(-1.0, 1.0), (-1.0, 1.0)]
 ```
 """
 function QuantumSystem(H_drives::Vector{<:AbstractMatrix{ℂ}}, T_max::Float64, drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}; time_dependent::Bool=false) where ℂ <: Number
