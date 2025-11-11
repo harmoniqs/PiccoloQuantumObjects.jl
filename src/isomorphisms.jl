@@ -20,6 +20,7 @@ export bloch_to_ket
 using LinearAlgebra
 using SparseArrays
 using TestItems
+using ..Gates
 
 
 @doc raw"""
@@ -289,6 +290,14 @@ function bloch_to_ket(bloch::AbstractVector{R}; digits::Integer=6) where R <: Re
     return Complex{R}[cos(θ/2), exp(im * φ) * sin(θ/2)]
 
 end
+
+function denisty_to_bloch(ψ::AbstractVector{<:Number})
+    @assert length(ψ) == 2
+    ρ = ψ * ψ'
+
+function bloch_to_density(
+
+)
 # *************************************************************************** #
 
 @testitem "Test ket isomorphisms" begin
