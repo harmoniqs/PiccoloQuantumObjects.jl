@@ -264,11 +264,6 @@ Convert a ket to a Bloch vector representation.
 function ket_to_bloch(ψ::AbstractVector{<:Number})
     @assert length(ψ) == 2
     ρ = ψ * ψ'
-    PAULIS = (
-        X = [0 1; 1 0],
-        Y = [0 -im; im 0],
-        Z = [1 0; 0 -1],
-        )
     bloch_vector =  [real(tr(ρ * P)) for P in [PAULIS.X, PAULIS.Y, PAULIS.Z]]
 
     return bloch_vector / norm(bloch_vector)
@@ -291,13 +286,17 @@ function bloch_to_ket(bloch::AbstractVector{R}; digits::Integer=6) where R <: Re
 
 end
 
-function denisty_to_bloch(ψ::AbstractVector{<:Number})
+function density_to_bloch(ψ::AbstractVector{<:Number})
     @assert length(ψ) == 2
     ρ = ψ * ψ'
+    return [real(tr(ρ * P)) for P in [PAULIS.X, PAULIS.Y, PAULIS.Z]]
+end
 
-function bloch_to_density(
+function bloch_to_density(v::AbstractVector{<:Real}) 
+    @assert length(v) == 3
+    return 0.5 * (I(2) + v[1]*PAULIS.X + v[2]*PAULIS.Y + v[3]*PAULIS.Z)
+end
 
-)
 # *************************************************************************** #
 
 @testitem "Test ket isomorphisms" begin
