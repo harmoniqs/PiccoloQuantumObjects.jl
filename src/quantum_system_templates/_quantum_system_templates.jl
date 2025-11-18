@@ -23,5 +23,6 @@ const ⊗ = kron
 include("transmons.jl")
 include("rydberg.jl")
 include("cats.jl")
+include("ions.jl")
 
 end  # module QuantumSystemTemplates

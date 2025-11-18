@@ -2,6 +2,7 @@ export TransmonSystem
 export TransmonDipoleCoupling
 export MultiTransmonSystem
 export QuantumSystemCoupling
+export TransmonCavitySystem
 
 @doc raw"""
     TransmonSystem(;
@@ -38,7 +39,7 @@ function TransmonSystem(;
     levels::Int=3,
     lab_frame::Bool=false,
     frame_ω::Float64=lab_frame ? 0.0 : ω,
-    mutiply_by_2π::Bool=true,
+    multiply_by_2π::Bool=true,
     lab_frame_type::Symbol=:duffing,
     drives::Bool=true,
     kwargs...
@@ -82,7 +83,7 @@ function TransmonSystem(;
         H_drives = Matrix{ComplexF64}[]
     end
 
-    if mutiply_by_2π
+    if multiply_by_2π
         H_drift *= 2π
         H_drives .*= 2π
     end
@@ -343,4 +344,154 @@ end
     # Only one drive
     @test comp.subsystems[1].n_drives == 0
     @test comp.subsystems[2].n_drives == 2
+end
+
+# *************************************************************************** #
+
+@doc raw"""
+    TransmonCavitySystem(;
+        qubit_levels::Int=4,
+        cavity_levels::Int=12,
+        χ::Float64=2π * 32.8e-6,    # Dispersive shift (GHz)
+        χ′::Float64=2π * 1.5e-9,    # Higher-order dispersive shift (GHz)
+        K_c::Float64=2π * 1e-9 / 2, # Cavity self-Kerr (GHz)
+        K_q::Float64=2π * 193e-3 / 2, # Qubit self-Kerr (GHz)
+        T_max::Float64=10.0,
+        drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=fill(1.0, 4),
+        multiply_by_2π::Bool=false, # Already in GHz with 2π factors
+    ) -> QuantumSystem
+
+Returns a `QuantumSystem` for a transmon qubit dispersively coupled to a cavity mode.
+
+This system models circuit QED architectures where a transmon (artificial atom) is coupled 
+to a microwave resonator in the dispersive regime, enabling quantum state manipulation and 
+readout.
+
+# Hamiltonian
+
+```math
+H = \tilde{\Delta} \hat{b}^\dagger \hat{b} 
+    - \chi \hat{a}^\dagger \hat{a} \hat{b}^\dagger \hat{b}
+    - \chi' \hat{b}^{\dagger 2} \hat{b}^2 \hat{a}^\dagger \hat{a}
+    - K_q \hat{a}^{\dagger 2} \hat{a}^2
+    - K_c \hat{b}^{\dagger 2} \hat{b}^2
+```
+
+where:
+- ``\hat{a}``, ``\hat{a}^\dagger`` are the transmon annihilation/creation operators
+- ``\hat{b}``, ``\hat{b}^\dagger`` are the cavity annihilation/creation operators  
+- ``\tilde{\Delta} = \chi/2`` is the shifted cavity frequency
+- ``\chi`` is the dispersive shift (qubit-cavity coupling)
+- ``\chi'`` is a higher-order dispersive correction
+- ``K_q``, ``K_c`` are self-Kerr nonlinearities
+
+The drives are:
+1. ``\hat{a}^\dagger + \hat{a}`` - Real transmon drive
+2. ``i(\hat{a}^\dagger - \hat{a})`` - Imaginary transmon drive
+3. ``\hat{b}^\dagger + \hat{b}`` - Real cavity drive
+4. ``i(\hat{b}^\dagger - \hat{b})`` - Imaginary cavity drive
+
+# Keyword Arguments
+- `qubit_levels`: Number of transmon Fock states (typically 3-5)
+- `cavity_levels`: Number of cavity Fock states (typically 10-20)
+- `χ`: Dispersive shift in GHz (with 2π). Typical: ~2π × 30-50 kHz
+- `χ′`: Higher-order dispersive shift in GHz. Typically small (~2π × 1-2 Hz)
+- `K_c`: Cavity self-Kerr in GHz. Typically ~2π × 1 Hz
+- `K_q`: Qubit self-Kerr (anharmonicity/2) in GHz. Typical: ~2π × 100-200 MHz
+- `T_max`: Maximum evolution time
+- `drive_bounds`: Control bounds for [Ωᵣ(qubit), Ωᵢ(qubit), αᵣ(cavity), αᵢ(cavity)]
+- `multiply_by_2π`: Whether to multiply by 2π (default false, assuming parameters already include it)
+
+# Example
+```julia
+# Standard cQED parameters
+sys = TransmonCavitySystem(
+    qubit_levels=4,
+    cavity_levels=15,
+    χ=2π * 32.8e-6,   # 32.8 kHz dispersive shift
+    K_q=2π * 193e-3/2, # ~193 MHz anharmonicity
+)
+```
+
+# References
+- Blais et al., "Circuit quantum electrodynamics," Rev. Mod. Phys. 93, 025005 (2021)
+- Koch et al., "Charge-insensitive qubit design derived from Cooper pair box," 
+  Phys. Rev. A 76, 042319 (2007)
+"""
+function TransmonCavitySystem(;
+    qubit_levels::Int=4,
+    cavity_levels::Int=12,
+    χ::Float64=2π * 32.8e-6,
+    χ′::Float64=2π * 1.5e-9,
+    K_c::Float64=2π * 1e-9 / 2,
+    K_q::Float64=2π * 193e-3 / 2,
+    T_max::Float64=10.0,
+    drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=fill(1.0, 4),
+    multiply_by_2π::Bool=false,
+)
+    # Cavity detuning in dispersive frame
+    Δ̃ = χ / 2
+    
+    # Build operators: qubit ⊗ cavity
+    â = lift_operator(annihilate(qubit_levels), 1, [qubit_levels, cavity_levels])
+    b̂ = lift_operator(annihilate(cavity_levels), 2, [qubit_levels, cavity_levels])
+    
+    # Drift Hamiltonian
+    H_drift = Δ̃ * b̂' * b̂ -
+        χ * â' * â * b̂' * b̂ -
+        χ′ * b̂'^2 * b̂^2 * â' * â -
+        K_q * â'^2 * â^2 -
+        K_c * b̂'^2 * b̂^2
+    
+    # Drive operators
+    H_drives = [
+        â' + â,              # Real transmon drive
+        1.0im * (â' - â),    # Imaginary transmon drive
+        b̂' + b̂,              # Real cavity drive
+        1.0im * (b̂' - b̂),    # Imaginary cavity drive
+    ]
+    
+    if multiply_by_2π
+        H_drift *= 2π
+        H_drives = [2π * H for H in H_drives]
+    end
+    
+    return QuantumSystem(
+        H_drift,
+        H_drives,
+        T_max,
+        drive_bounds
+    )
+end
+
+# *************************************************************************** #
+
+@testitem "TransmonCavitySystem: basic construction" begin
+    using PiccoloQuantumObjects
+    
+    sys = TransmonCavitySystem()
+    @test sys isa QuantumSystem
+    @test sys.levels == 4 * 12  # qubit_levels × cavity_levels
+    @test sys.n_drives == 4     # 2 qubit drives + 2 cavity drives
+    
+    # Check Hamiltonian is Hermitian
+    using LinearAlgebra: ishermitian
+    @test ishermitian(sys.H_drift)
+    for H in sys.H_drives
+        @test ishermitian(H)
+    end
+end
+
+@testitem "TransmonCavitySystem: custom parameters" begin
+    using PiccoloQuantumObjects
+    
+    sys = TransmonCavitySystem(
+        qubit_levels=3,
+        cavity_levels=10,
+        χ=2π * 50e-6,
+        K_q=2π * 200e-3/2,
+        drive_bounds=[0.5, 0.5, 1.0, 1.0]
+    )
+    @test sys.levels == 3 * 10
+    @test sys.n_drives == 4
 end
