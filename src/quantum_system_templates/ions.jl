@@ -113,31 +113,11 @@ function IonChainSystem(;
     end
     
     # Total Hilbert space dimension: ion_levels^N_ions × mode_levels^N_modes
+    # Subsystem structure: [ion_1, ion_2, ..., ion_N, mode_1, mode_2, ..., mode_M]
+    subsystem_levels = vcat(fill(ion_levels, N_ions), fill(mode_levels, N_modes))
     ion_dim = ion_levels^N_ions
     mode_dim = mode_levels^N_modes
     total_dim = ion_dim * mode_dim
-    
-    # Helper function to lift ion operators to full space
-    function lift_ion_op(op_single::Matrix, ion_idx::Int)
-        # Build tensor product: I ⊗ ... ⊗ op ⊗ ... ⊗ I (ions) ⊗ I (modes)
-        ops = [Matrix{ComplexF64}(1.0I, ion_levels, ion_levels) for _ in 1:N_ions]
-        ops[ion_idx] = op_single
-        ion_part = foldl(⊗, ops)
-        return ion_part ⊗ Matrix{ComplexF64}(1.0I, mode_dim, mode_dim)
-    end
-    
-    # Helper function to lift mode operators to full space
-    function lift_mode_op(op_single::Matrix, mode_idx::Int)
-        # Build tensor product: I (ions) ⊗ I ⊗ ... ⊗ op ⊗ ... ⊗ I (modes)
-        if N_modes == 1
-            mode_part = op_single
-        else
-            ops = [Matrix{ComplexF64}(1.0I, mode_levels, mode_levels) for _ in 1:N_modes]
-            ops[mode_idx] = op_single
-            mode_part = foldl(⊗, ops)
-        end
-        return Matrix{ComplexF64}(1.0I, ion_dim, ion_dim) ⊗ mode_part
-    end
     
     # Pauli operators for ion_levels=2 case
     if ion_levels == 2
@@ -161,22 +141,22 @@ function IonChainSystem(;
     # Ion internal Hamiltonian: Σᵢ ωq,i σᵢ⁺ σᵢ⁻
     for i in 1:N_ions
         detuning = lab_frame ? ωq_vec[i] : (ωq_vec[i] - frame_ω)
-        H_drift += detuning * lift_ion_op(σ_plus' * σ_plus, i)
+        H_drift += detuning * lift_operator(σ_plus' * σ_plus, i, subsystem_levels)
     end
     
     # Motional mode Hamiltonian: Σₘ ωₘ aₘ⁺ aₘ
     for m in 1:N_modes
         a_m = annihilate(mode_levels)
-        H_drift += ωm_vec[m] * lift_mode_op(a_m' * a_m, m)
+        H_drift += ωm_vec[m] * lift_operator(a_m' * a_m, N_ions + m, subsystem_levels)
     end
     
     # Lamb-Dicke coupling: Σᵢ,ₘ ηᵢ,ₘ (σᵢ⁺ + σᵢ⁻)(aₘ + aₘ⁺)
     for i in 1:N_ions
         for m in 1:N_modes
             if abs(η_mat[i, m]) > 1e-12  # Skip negligible couplings
-                σ_i_x = lift_ion_op(σ_x, i)
+                σ_i_x = lift_operator(σ_x, i, subsystem_levels)
                 a_m = annihilate(mode_levels)
-                x_m = lift_mode_op(a_m + a_m', m)
+                x_m = lift_operator(a_m + a_m', N_ions + m, subsystem_levels)
                 H_drift += η_mat[i, m] * σ_i_x * x_m
             end
         end
@@ -185,8 +165,8 @@ function IonChainSystem(;
     # Drive operators: Ωx,i σᵢˣ and Ωy,i σᵢʸ for each ion
     H_drives = Matrix{ComplexF64}[]
     for i in 1:N_ions
-        push!(H_drives, lift_ion_op(σ_x, i))  # X drive on ion i
-        push!(H_drives, lift_ion_op(σ_y, i))  # Y drive on ion i
+        push!(H_drives, lift_operator(σ_x, i, subsystem_levels))  # X drive on ion i
+        push!(H_drives, lift_operator(σ_y, i, subsystem_levels))  # Y drive on ion i
     end
     
     # Apply 2π factor if requested
@@ -251,17 +231,11 @@ function MolmerSorensenCoupling(
     η_mat = η isa Float64 ? fill(η, N_ions, N_modes) : η
     ωm_vec = ωm isa Vector ? ωm : fill(ωm, N_modes)
     
+    # Subsystem structure: [ion_1, ion_2, ..., ion_N, mode_1, mode_2, ..., mode_M]
+    subsystem_levels = vcat(fill(ion_levels, N_ions), fill(mode_levels, N_modes))
     ion_dim = ion_levels^N_ions
     mode_dim = mode_levels^N_modes
     total_dim = ion_dim * mode_dim
-    
-    # Helper to lift ion operators
-    function lift_ion_op(op_single::Matrix, ion_idx::Int)
-        ops = [Matrix{ComplexF64}(1.0I, ion_levels, ion_levels) for _ in 1:N_ions]
-        ops[ion_idx] = op_single
-        ion_part = foldl(⊗, ops)
-        return ion_part ⊗ Matrix{ComplexF64}(1.0I, mode_dim, mode_dim)
-    end
     
     # Pauli-X for two-level systems
     if ion_levels == 2
@@ -275,8 +249,8 @@ function MolmerSorensenCoupling(
     H_MS = zeros(ComplexF64, total_dim, total_dim)
     for i in 1:N_ions-1
         for j in i+1:N_ions
-            σ_x_i = lift_ion_op(σ_x, i)
-            σ_x_j = lift_ion_op(σ_x, j)
+            σ_x_i = lift_operator(σ_x, i, subsystem_levels)
+            σ_x_j = lift_operator(σ_x, j, subsystem_levels)
             H_MS += σ_x_i * σ_x_j
         end
     end
@@ -388,28 +362,11 @@ function IonChainMSSystem(;
     @assert length(drive_bounds) == N_ions
     
     # Hilbert space dimensions
+    # Subsystem structure: [ion_1, ion_2, ..., ion_N, mode_1, mode_2, ..., mode_M]
+    subsystem_levels = vcat(fill(ion_levels, N_ions), fill(mode_levels, N_modes))
     ion_dim = ion_levels^N_ions
     mode_dim = mode_levels^N_modes
     total_dim = ion_dim * mode_dim
-    
-    # Helper functions for lifting operators
-    function lift_ion_op(op_single::Matrix, ion_idx::Int)
-        ops = [Matrix{ComplexF64}(1.0I, ion_levels, ion_levels) for _ in 1:N_ions]
-        ops[ion_idx] = op_single
-        ion_part = foldl(⊗, ops)
-        return ion_part ⊗ Matrix{ComplexF64}(1.0I, mode_dim, mode_dim)
-    end
-    
-    function lift_mode_op(op_single::Matrix, mode_idx::Int)
-        if N_modes == 1
-            mode_part = op_single
-        else
-            ops = [Matrix{ComplexF64}(1.0I, mode_levels, mode_levels) for _ in 1:N_modes]
-            ops[mode_idx] = op_single
-            mode_part = foldl(⊗, ops)
-        end
-        return Matrix{ComplexF64}(1.0I, ion_dim, ion_dim) ⊗ mode_part
-    end
     
     # Pauli operators
     if ion_levels == 2
@@ -427,7 +384,7 @@ function IonChainMSSystem(;
     H_drift = zeros(ComplexF64, total_dim, total_dim)
     for m in 1:N_modes
         a_m = annihilate(mode_levels)
-        H_drift += ωm_vec[m] * lift_mode_op(a_m' * a_m, m)
+        H_drift += ωm_vec[m] * lift_operator(a_m' * a_m, N_ions + m, subsystem_levels)
     end
     
     # Time-dependent drive operators: H(u, t) = Σᵢ uᵢ(t) Hᵢ(t)
@@ -443,14 +400,14 @@ function IonChainMSSystem(;
         # Base drive: -ηⱼ σ_{y,j} ⊗ (a + a†)
         H_j = zeros(ComplexF64, total_dim, total_dim)
         
-        σ_y_j = lift_ion_op(σ_y, j)
+        σ_y_j = lift_operator(σ_y, j, subsystem_levels)
         
         for m in 1:N_modes
             if abs(η_mat[j, m]) > 1e-12
                 a_m = annihilate(mode_levels)
                 # Split into blue (a) and red (a†) sideband terms
-                a_blue = lift_mode_op(a_m, m)
-                a_red = lift_mode_op(Matrix(a_m'), m)
+                a_blue = lift_operator(a_m, N_ions + m, subsystem_levels)
+                a_red = lift_operator(Matrix(a_m'), N_ions + m, subsystem_levels)
                 
                 # Store as two operators for time-dependent evaluation
                 # H(t) = -ηⱼ σ_y (a e^{iδt} + a† e^{-iδt})
