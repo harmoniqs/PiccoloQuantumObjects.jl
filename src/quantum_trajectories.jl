@@ -19,8 +19,13 @@ export AbstractQuantumTrajectory
 export UnitaryTrajectory
 export KetTrajectory
 export DensityTrajectory
+export EnsembleTrajectory
+export SamplingTrajectory
 export get_trajectory, get_system, get_goal, get_state_name, get_control_name, get_state, get_controls
+export get_ensemble_state_names, get_systems, get_weights
 export unitary_geodesic, unitary_linear_interpolation, linear_interpolation
+export build_sampling_trajectory, build_ensemble_trajectory, build_ensemble_trajectory_from_trajectories
+export update_base_trajectory
 
 using NamedTrajectories
 using LinearAlgebra
@@ -323,48 +328,33 @@ A trajectory for quantum state transfer problems.
 # Fields
 - `trajectory::NamedTrajectory`: The underlying trajectory data (stored as a copy)
 - `system::QuantumSystem`: The quantum system
-- `state_name::Symbol`: Name of the primary state variable (typically `:ψ̃` or `:ψ̃1`)
-- `state_names::Vector{Symbol}`: Names of all state variables (e.g., `[:ψ̃1, :ψ̃2]` for multiple states)
+- `state_name::Symbol`: Name of the state variable (typically `:ψ̃`)
 - `control_name::Symbol`: Name of the control variable (typically `:u`)
-- `goals::Vector{<:AbstractVector{ComplexF64}}`: Target ket states (can be multiple)
+- `goal::AbstractVector{ComplexF64}`: Target ket state
+
+For multiple state transfers with a shared system, use `EnsembleTrajectory` wrapping
+multiple `KetTrajectory` instances.
 """
 struct KetTrajectory <: AbstractQuantumTrajectory
     trajectory::NamedTrajectory
     system::QuantumSystem
     state_name::Symbol
-    state_names::Vector{Symbol}
     control_name::Symbol
-    goals::Vector{<:AbstractVector{ComplexF64}}
+    goal::AbstractVector{ComplexF64}
     
     function KetTrajectory(
         sys::QuantumSystem,
         ψ_init::AbstractVector{ComplexF64},
         ψ_goal::AbstractVector{ComplexF64},
         N::Int;
-        kwargs...
-    )
-        # Delegate to multi-state constructor
-        return KetTrajectory(sys, [ψ_init], [ψ_goal], N; kwargs...)
-    end
-    
-    # High-level constructor: multiple states
-    function KetTrajectory(
-        sys::QuantumSystem,
-        ψ_inits::AbstractVector{<:AbstractVector{ComplexF64}},
-        ψ_goals::AbstractVector{<:AbstractVector{ComplexF64}},
-        N::Int;
         state_name::Symbol=:ψ̃,
-        state_names::Union{AbstractVector{<:Symbol}, Nothing}=nothing,
         Δt_min::Union{Float64, Nothing}=nothing,
         Δt_max::Union{Float64, Nothing}=nothing,
         Δt_bounds::Union{Tuple{Float64, Float64}, Nothing}=nothing,
         free_time::Bool=true
     )
-        @assert length(ψ_inits) == length(ψ_goals) "ψ_inits and ψ_goals must have the same length"
-        
         Δt = sys.T_max / (N - 1)
         n_drives = sys.n_drives
-        n_states = length(ψ_inits)
         
         # Handle Δt_bounds: prioritize Δt_bounds tuple if provided, else use Δt_min/Δt_max
         if !isnothing(Δt_bounds)
@@ -374,23 +364,12 @@ struct KetTrajectory <: AbstractQuantumTrajectory
             _Δt_max = isnothing(Δt_max) ? 2 * Δt : Δt_max
         end
         
-        # Generate state names if not provided
-        if isnothing(state_names)
-            if n_states == 1
-                state_names = [state_name]
-            else
-                state_names = [Symbol(string(state_name) * "$i") for i = 1:n_states]
-            end
-        else
-            @assert length(state_names) == n_states "state_names must have same length as ψ_inits"
-        end
-        
         # Convert to iso representation
-        ψ̃_inits = ket_to_iso.(ψ_inits)
-        ψ̃_goals = ket_to_iso.(ψ_goals)
+        ψ̃_init = ket_to_iso(ψ_init)
+        ψ̃_goal = ket_to_iso(ψ_goal)
         
-        # Linear interpolation of states
-        ψ̃_trajs = [linear_interpolation(ψ̃_init, ψ̃_goal, N) for (ψ̃_init, ψ̃_goal) in zip(ψ̃_inits, ψ̃_goals)]
+        # Linear interpolation of state
+        ψ̃ = linear_interpolation(ψ̃_init, ψ̃_goal, N)
         
         # Initialize controls (zero at boundaries)
         u = hcat(
@@ -403,12 +382,9 @@ struct KetTrajectory <: AbstractQuantumTrajectory
         Δt_vec = fill(Δt, N)
         
         # Initial and final constraints
-        initial_states = NamedTuple{Tuple(state_names)}(Tuple(ψ̃_inits))
-        goal_states = NamedTuple{Tuple(state_names)}(Tuple(ψ̃_goals))
-        
-        initial = merge(initial_states, (u = zeros(n_drives),))
+        initial = (; state_name => ψ̃_init, :u => zeros(n_drives))
         final = (u = zeros(n_drives),)
-        goal_constraint = goal_states
+        goal_constraint = (; state_name => ψ̃_goal)
         
         # Time data (automatic for time-dependent systems)
         if sys.time_dependent
@@ -426,8 +402,7 @@ struct KetTrajectory <: AbstractQuantumTrajectory
         )
         
         # Build component data
-        state_data = NamedTuple{Tuple(state_names)}(Tuple(ψ̃_trajs))
-        comps_data = merge(state_data, (u = u, Δt = reshape(Δt_vec, 1, N)))
+        comps_data = (; state_name => ψ̃, :u => u, :Δt => reshape(Δt_vec, 1, N))
         
         if sys.time_dependent
             comps_data = merge(comps_data, (t = reshape(t_data, 1, N),))
@@ -443,13 +418,9 @@ struct KetTrajectory <: AbstractQuantumTrajectory
             bounds = bounds
         )
         
-        # Store all state names and use first as primary
-        return new(traj, sys, state_names[1], collect(state_names), :u, ψ_goals)
+        return new(traj, sys, state_name, :u, ψ_goal)
     end
 end
-
-# Special accessor for KetTrajectory
-get_goal(qtraj::KetTrajectory) = length(qtraj.goals) == 1 ? qtraj.goals[1] : qtraj.goals
 
 """
     DensityTrajectory <: AbstractQuantumTrajectory
@@ -547,6 +518,497 @@ struct DensityTrajectory <: AbstractQuantumTrajectory
         
         return new(traj, sys, :ρ⃗̃, :u, ρ_goal)
     end
+end
+
+# ============================================================================= #
+#                          Sampling Trajectory Type                             #
+# ============================================================================= #
+
+"""
+    SamplingTrajectory{T<:AbstractQuantumTrajectory} <: AbstractQuantumTrajectory
+
+A trajectory wrapper for robust/sampling optimization over an ensemble of systems.
+
+This type wraps a base quantum trajectory and extends it to handle multiple quantum
+systems with different parameters. Each system in the ensemble gets its own state 
+variable (e.g., `Ũ⃗_sample_1`, `Ũ⃗_sample_2`), while controls are shared across all systems.
+
+Use this for:
+- Robust optimization over parameter uncertainty
+- Ensemble control where different physical systems share the same pulse
+- Sampling-based optimization over system variations
+
+# Fields
+- `base_trajectory::T`: The base quantum trajectory (nominal system)
+- `systems::Vector{<:AbstractQuantumSystem}`: The ensemble of systems to optimize over
+- `weights::Vector{Float64}`: Weights for each system in the objective
+- `sample_state_names::Vector{Symbol}`: Names of state variables for each system
+
+# Accessors
+- `get_systems(qtraj)`: Return all systems in the ensemble
+- `get_weights(qtraj)`: Return the weights for each system
+- `get_ensemble_state_names(qtraj)`: Return the state variable names for each system
+
+The standard `AbstractQuantumTrajectory` interface methods forward to the base trajectory:
+- `get_trajectory(qtraj)`: Returns the base trajectory's NamedTrajectory
+- `get_system(qtraj)`: Returns the nominal (first) system
+- `get_goal(qtraj)`: Returns the goal from the base trajectory
+- `get_state_name(qtraj)`: Returns the base state name (not sample names)
+- `get_control_name(qtraj)`: Returns the control name
+
+# Example
+```julia
+# Create base trajectory with nominal system
+sys_nominal = QuantumSystem(H_drift, H_drives, T, bounds)
+qtraj = UnitaryTrajectory(sys_nominal, U_goal, N)
+
+# Create sampling trajectory with perturbed systems for robust optimization
+sys_perturbed = QuantumSystem(1.1 * H_drift, H_drives, T, bounds)
+systems = [sys_nominal, sys_perturbed]
+
+sampling_traj = SamplingTrajectory(qtraj, systems)
+```
+
+See also: [`EnsembleTrajectory`](@ref) for multiple initial/goal states with a shared system.
+"""
+struct SamplingTrajectory{T<:AbstractQuantumTrajectory} <: AbstractQuantumTrajectory
+    base_trajectory::T
+    systems::Vector{<:AbstractQuantumSystem}
+    weights::Vector{Float64}
+    sample_state_names::Vector{Symbol}
+    
+    function SamplingTrajectory(
+        base_trajectory::T,
+        systems::Vector{<:AbstractQuantumSystem};
+        weights::Vector{Float64}=fill(1.0, length(systems))
+    ) where {T<:AbstractQuantumTrajectory}
+        @assert length(weights) == length(systems) "weights must match number of systems"
+        
+        state_sym = get_state_name(base_trajectory)
+        state_names = _sample_state_names(state_sym, length(systems))
+        
+        return new{T}(base_trajectory, systems, weights, state_names)
+    end
+    
+    # Inner constructor for direct field initialization
+    function SamplingTrajectory{T}(
+        base_trajectory::T,
+        systems::Vector{<:AbstractQuantumSystem},
+        weights::Vector{Float64},
+        sample_state_names::Vector{Symbol}
+    ) where {T<:AbstractQuantumTrajectory}
+        return new{T}(base_trajectory, systems, weights, sample_state_names)
+    end
+end
+
+# Non-parametric constructor for explicit state names
+function SamplingTrajectory(
+    base_trajectory::T,
+    systems::Vector{<:AbstractQuantumSystem},
+    weights::Vector{Float64},
+    sample_state_names::Vector{Symbol}
+) where {T<:AbstractQuantumTrajectory}
+    return SamplingTrajectory{T}(base_trajectory, systems, weights, sample_state_names)
+end
+
+# ============================================================================= #
+# SamplingTrajectory Interface Implementation
+# ============================================================================= #
+
+# Forward AbstractQuantumTrajectory interface to base_trajectory
+get_trajectory(qtraj::SamplingTrajectory) = get_trajectory(qtraj.base_trajectory)
+get_system(qtraj::SamplingTrajectory) = get_system(qtraj.base_trajectory)  # Nominal system
+get_goal(qtraj::SamplingTrajectory) = get_goal(qtraj.base_trajectory)
+get_state_name(qtraj::SamplingTrajectory) = get_state_name(qtraj.base_trajectory)
+get_control_name(qtraj::SamplingTrajectory) = get_control_name(qtraj.base_trajectory)
+
+# Sampling-specific accessors
+"""
+    get_systems(qtraj::SamplingTrajectory) -> Vector{<:AbstractQuantumSystem}
+
+Return all systems in the sampling ensemble.
+"""
+get_systems(qtraj::SamplingTrajectory) = qtraj.systems
+
+"""
+    get_weights(qtraj::SamplingTrajectory) -> Vector{Float64}
+
+Return the weights for each system in the sampling ensemble.
+"""
+get_weights(qtraj::SamplingTrajectory) = qtraj.weights
+
+"""
+    get_ensemble_state_names(qtraj::SamplingTrajectory) -> Vector{Symbol}
+
+Return the state variable names for each system in the sampling ensemble.
+"""
+get_ensemble_state_names(qtraj::SamplingTrajectory) = qtraj.sample_state_names
+
+# Forward indexing and property access
+Base.getindex(qtraj::SamplingTrajectory, key) = getindex(qtraj.base_trajectory, key)
+Base.setindex!(qtraj::SamplingTrajectory, value, key) = setindex!(qtraj.base_trajectory, value, key)
+
+function Base.getproperty(qtraj::SamplingTrajectory, symb::Symbol)
+    if symb ∈ fieldnames(SamplingTrajectory)
+        return getfield(qtraj, symb)
+    else
+        return getproperty(getfield(qtraj, :base_trajectory), symb)
+    end
+end
+
+function Base.propertynames(qtraj::SamplingTrajectory)
+    return tuple(fieldnames(SamplingTrajectory)..., propertynames(getfield(qtraj, :base_trajectory))...)
+end
+
+# ============================================================================= #
+#                          Ensemble Trajectory Type                             #
+# ============================================================================= #
+
+"""
+    EnsembleTrajectory{T<:AbstractQuantumTrajectory} <: AbstractQuantumTrajectory
+
+A trajectory wrapper for ensemble optimization over multiple initial/goal states with a shared system.
+
+This type wraps multiple quantum trajectories that share the same system but have different
+initial and goal states. Each trajectory in the ensemble gets its own state variable 
+(e.g., `Ũ⃗_init_1`, `Ũ⃗_init_2`), while controls and the system are shared.
+
+Use this for:
+- Training a gate on the computational basis states
+- Multi-state transfer problems
+- Any scenario where you want the same pulse to achieve different state→goal mappings
+
+# Fields
+- `trajectories::Vector{T}`: The quantum trajectories (each with different init/goal)
+- `weights::Vector{Float64}`: Weights for each trajectory in the objective
+- `ensemble_state_names::Vector{Symbol}`: Names of state variables for each trajectory
+
+# Accessors
+- `get_weights(qtraj)`: Return the weights for each trajectory
+- `get_ensemble_state_names(qtraj)`: Return the state variable names for each trajectory
+
+The standard `AbstractQuantumTrajectory` interface methods use the first trajectory:
+- `get_trajectory(qtraj)`: Returns the first trajectory's NamedTrajectory
+- `get_system(qtraj)`: Returns the shared system
+- `get_goal(qtraj)`: Returns goals from all trajectories
+- `get_state_name(qtraj)`: Returns the base state name
+- `get_control_name(qtraj)`: Returns the control name
+
+# Example
+```julia
+# Create system
+sys = QuantumSystem(H_drift, H_drives, T, bounds)
+
+# Create trajectories for different state transfers
+qtraj1 = KetTrajectory(sys, ψ0, ψ1, N)  # |0⟩ → |1⟩
+qtraj2 = KetTrajectory(sys, ψ1, ψ0, N)  # |1⟩ → |0⟩
+
+ensemble_traj = EnsembleTrajectory([qtraj1, qtraj2])
+```
+
+See also: [`SamplingTrajectory`](@ref) for optimization over different systems.
+"""
+struct EnsembleTrajectory{T<:AbstractQuantumTrajectory} <: AbstractQuantumTrajectory
+    trajectories::Vector{T}
+    weights::Vector{Float64}
+    ensemble_state_names::Vector{Symbol}
+    
+    function EnsembleTrajectory(
+        trajectories::Vector{T};
+        weights::Vector{Float64}=fill(1.0, length(trajectories))
+    ) where {T<:AbstractQuantumTrajectory}
+        @assert length(trajectories) > 0 "Must provide at least one trajectory"
+        @assert length(weights) == length(trajectories) "weights must match number of trajectories"
+        
+        # Verify all trajectories share the same system
+        sys = get_system(trajectories[1])
+        for qtraj in trajectories[2:end]
+            @assert get_system(qtraj) === sys "All trajectories must share the same system"
+        end
+        
+        state_sym = get_state_name(trajectories[1])
+        state_names = _ensemble_state_names(state_sym, length(trajectories))
+        
+        return new{T}(trajectories, weights, state_names)
+    end
+    
+    # Inner constructor for direct field initialization
+    function EnsembleTrajectory{T}(
+        trajectories::Vector{T},
+        weights::Vector{Float64},
+        ensemble_state_names::Vector{Symbol}
+    ) where {T<:AbstractQuantumTrajectory}
+        return new{T}(trajectories, weights, ensemble_state_names)
+    end
+end
+
+# Non-parametric constructor for explicit state names
+function EnsembleTrajectory(
+    trajectories::Vector{T},
+    weights::Vector{Float64},
+    ensemble_state_names::Vector{Symbol}
+) where {T<:AbstractQuantumTrajectory}
+    return EnsembleTrajectory{T}(trajectories, weights, ensemble_state_names)
+end
+
+# ============================================================================= #
+# EnsembleTrajectory Interface Implementation
+# ============================================================================= #
+
+# Forward AbstractQuantumTrajectory interface to first trajectory
+get_trajectory(qtraj::EnsembleTrajectory) = get_trajectory(qtraj.trajectories[1])
+get_system(qtraj::EnsembleTrajectory) = get_system(qtraj.trajectories[1])  # Shared system
+get_state_name(qtraj::EnsembleTrajectory) = get_state_name(qtraj.trajectories[1])
+get_control_name(qtraj::EnsembleTrajectory) = get_control_name(qtraj.trajectories[1])
+
+# Get all goals from all trajectories
+get_goal(qtraj::EnsembleTrajectory) = [get_goal(t) for t in qtraj.trajectories]
+
+# Ensemble-specific accessors
+"""
+    get_weights(qtraj::EnsembleTrajectory) -> Vector{Float64}
+
+Return the weights for each trajectory in the ensemble.
+"""
+get_weights(qtraj::EnsembleTrajectory) = qtraj.weights
+
+"""
+    get_ensemble_state_names(qtraj::EnsembleTrajectory) -> Vector{Symbol}
+
+Return the state variable names for each trajectory in the ensemble.
+"""
+get_ensemble_state_names(qtraj::EnsembleTrajectory) = qtraj.ensemble_state_names
+
+# Forward indexing and property access to first trajectory
+Base.getindex(qtraj::EnsembleTrajectory, key) = getindex(qtraj.trajectories[1], key)
+Base.setindex!(qtraj::EnsembleTrajectory, value, key) = setindex!(qtraj.trajectories[1], value, key)
+
+function Base.getproperty(qtraj::EnsembleTrajectory, symb::Symbol)
+    if symb ∈ fieldnames(EnsembleTrajectory)
+        return getfield(qtraj, symb)
+    else
+        return getproperty(getfield(qtraj, :trajectories)[1], symb)
+    end
+end
+
+function Base.propertynames(qtraj::EnsembleTrajectory)
+    return tuple(fieldnames(EnsembleTrajectory)..., propertynames(getfield(qtraj, :trajectories)[1])...)
+end
+
+# ============================================================================= #
+# Shared Trajectory Utilities
+# ============================================================================= #
+
+"""
+    _sample_state_names(state_sym::Symbol, n_samples::Int) -> Vector{Symbol}
+
+Generate state variable names for each sample in a sampling trajectory.
+
+# Examples
+```julia
+_sample_state_names(:Ũ⃗, 3)  # [:Ũ⃗_sample_1, :Ũ⃗_sample_2, :Ũ⃗_sample_3]
+```
+"""
+_sample_state_names(state_sym::Symbol, n_samples::Int) = 
+    [Symbol(state_sym, :_sample_, i) for i in 1:n_samples]
+
+"""
+    _ensemble_state_names(state_sym::Symbol, n_members::Int) -> Vector{Symbol}
+
+Generate state variable names for each member in an ensemble trajectory.
+
+# Examples
+```julia
+_ensemble_state_names(:Ũ⃗, 3)  # [:Ũ⃗_init_1, :Ũ⃗_init_2, :Ũ⃗_init_3]
+```
+"""
+_ensemble_state_names(state_sym::Symbol, n_members::Int) = 
+    [Symbol(state_sym, :_init_, i) for i in 1:n_members]
+
+"""
+    build_sampling_trajectory(
+        base_traj::NamedTrajectory,
+        state_sym::Symbol,
+        n_samples::Int
+    ) -> Tuple{NamedTrajectory, Vector{Symbol}}
+
+Create a new trajectory with duplicated state variables for sampling optimization.
+
+This function takes a base trajectory and creates a new one where:
+- All non-state components (controls, derivatives, timesteps) are shared
+- The state variable is duplicated for each sample with names like `:Ũ⃗_sample_1`, `:Ũ⃗_sample_2`
+- Initial conditions are duplicated for each sample's state
+- Goals are duplicated for each sample's state
+
+Returns a tuple of (new_trajectory, sample_state_names).
+
+# Arguments
+- `base_traj::NamedTrajectory`: The base trajectory to duplicate
+- `state_sym::Symbol`: The name of the state variable to duplicate
+- `n_samples::Int`: Number of samples in the ensemble
+
+# Returns
+- `Tuple{NamedTrajectory, Vector{Symbol}}`: New trajectory and list of sample state names
+
+# Example
+```julia
+base_traj = get_trajectory(qtraj)
+new_traj, state_names = build_sampling_trajectory(base_traj, :Ũ⃗, 3)
+# state_names = [:Ũ⃗_sample_1, :Ũ⃗_sample_2, :Ũ⃗_sample_3]
+```
+"""
+function build_sampling_trajectory(
+    base_traj::NamedTrajectory,
+    state_sym::Symbol,
+    n_samples::Int
+)
+    state_names = _sample_state_names(state_sym, n_samples)
+    
+    # Shared components (controls, derivatives, etc.)
+    shared_components = (
+        name => base_traj[name] 
+        for name in base_traj.names if name != state_sym
+    )
+    
+    # Duplicated state components for each sample
+    sample_components = (
+        name => copy(base_traj[state_sym]) 
+        for name in state_names
+    )
+    
+    # Merge all components
+    new_components = merge(
+        NamedTuple(shared_components),
+        NamedTuple(sample_components)
+    )
+    
+    # Build initial conditions: copy non-state, duplicate state
+    base_init_state = base_traj.initial[state_sym]
+    init_shared = (k => v for (k, v) in pairs(base_traj.initial) if k != state_sym)
+    init_sample = (name => base_init_state for name in state_names)
+    new_initial = merge(NamedTuple(init_shared), NamedTuple(init_sample))
+    
+    # Build final conditions (without state - handled by objective)
+    new_final = NamedTuple(k => v for (k, v) in pairs(base_traj.final) if k != state_sym)
+    
+    # Build goal conditions: duplicate if present
+    new_goal = if haskey(base_traj.goal, state_sym)
+        base_goal = base_traj.goal[state_sym]
+        NamedTuple(name => base_goal for name in state_names)
+    else
+        NamedTuple()
+    end
+    
+    new_traj = NamedTrajectory(
+        new_components;
+        controls=base_traj.control_names,
+        timestep=base_traj.timestep,
+        initial=new_initial,
+        final=new_final,
+        goal=new_goal,
+        bounds=base_traj.bounds
+    )
+    
+    return new_traj, state_names
+end
+
+# Alias for backward compatibility
+const build_ensemble_trajectory = build_sampling_trajectory
+
+"""
+    build_ensemble_trajectory_from_trajectories(
+        trajectories::Vector{<:AbstractQuantumTrajectory}
+    ) -> Tuple{NamedTrajectory, Vector{Symbol}}
+
+Create a new trajectory from multiple quantum trajectories with different initial/goal states.
+
+Each trajectory's state is included with names like `:Ũ⃗_init_1`, `:Ũ⃗_init_2`.
+Controls and other components are taken from the first trajectory.
+
+# Arguments
+- `trajectories::Vector{<:AbstractQuantumTrajectory}`: Trajectories with shared system
+
+# Returns
+- `Tuple{NamedTrajectory, Vector{Symbol}}`: New trajectory and list of ensemble state names
+"""
+function build_ensemble_trajectory_from_trajectories(
+    trajectories::Vector{<:AbstractQuantumTrajectory}
+)
+    @assert length(trajectories) > 0 "Must provide at least one trajectory"
+    
+    state_sym = get_state_name(trajectories[1])
+    state_names = _ensemble_state_names(state_sym, length(trajectories))
+    
+    base_traj = get_trajectory(trajectories[1])
+    
+    # Shared components from first trajectory (controls, derivatives, etc.)
+    shared_components = (
+        name => base_traj[name] 
+        for name in base_traj.names if name != state_sym
+    )
+    
+    # State components from each trajectory
+    ensemble_components = (
+        state_names[i] => copy(get_trajectory(trajectories[i])[state_sym])
+        for i in 1:length(trajectories)
+    )
+    
+    # Merge all components
+    new_components = merge(
+        NamedTuple(shared_components),
+        NamedTuple(ensemble_components)
+    )
+    
+    # Build initial conditions from each trajectory
+    init_shared = (k => v for (k, v) in pairs(base_traj.initial) if k != state_sym)
+    init_ensemble = (
+        state_names[i] => get_trajectory(trajectories[i]).initial[state_sym]
+        for i in 1:length(trajectories)
+    )
+    new_initial = merge(NamedTuple(init_shared), NamedTuple(init_ensemble))
+    
+    # Build final conditions (without state - handled by objective)
+    new_final = NamedTuple(k => v for (k, v) in pairs(base_traj.final) if k != state_sym)
+    
+    # Build goal conditions from each trajectory
+    new_goal = if haskey(base_traj.goal, state_sym)
+        NamedTuple(
+            state_names[i] => get_trajectory(trajectories[i]).goal[state_sym]
+            for i in 1:length(trajectories)
+        )
+    else
+        NamedTuple()
+    end
+    
+    new_traj = NamedTrajectory(
+        new_components;
+        controls=base_traj.control_names,
+        timestep=base_traj.timestep,
+        initial=new_initial,
+        final=new_final,
+        goal=new_goal,
+        bounds=base_traj.bounds
+    )
+    
+    return new_traj, state_names
+end
+
+"""
+    update_base_trajectory(qtraj::SamplingTrajectory, new_base::T) where {T<:AbstractQuantumTrajectory}
+
+Create a new SamplingTrajectory with an updated base trajectory.
+Preserves the systems, weights, and sample state names.
+"""
+function update_base_trajectory(
+    qtraj::SamplingTrajectory{T}, 
+    new_base::T
+) where {T<:AbstractQuantumTrajectory}
+    return SamplingTrajectory{T}(
+        new_base, 
+        qtraj.systems, 
+        qtraj.weights, 
+        qtraj.sample_state_names
+    )
 end
 
 # ============================================================================= #
@@ -650,24 +1112,11 @@ end
     @test qtraj4.bounds[:Δt][1][1] == 0.05
     @test qtraj4.bounds[:Δt][2][1] == 0.2
     
-    # Test with multiple states
-    ψ2_init = ComplexF64[0.0, 1.0]
-    ψ2_goal = ComplexF64[1.0, 0.0]
-    qtraj5 = KetTrajectory(sys, [ψ_init, ψ2_init], [ψ_goal, ψ2_goal], N)
+    # Test with custom state name
+    qtraj5 = KetTrajectory(sys, ψ_init, ψ_goal, N; state_name=:ψ̃_custom)
     @test qtraj5 isa KetTrajectory
-    @test size(qtraj5[:ψ̃1], 2) == N
-    @test size(qtraj5[:ψ̃2], 2) == N
-    @test size(qtraj5[:u], 2) == N
-    @test get_goal(qtraj5) == [ψ_goal, ψ2_goal]  # Multiple goals
-    
-    # Test with custom state names
-    qtraj6 = KetTrajectory(sys, [ψ_init, ψ2_init], [ψ_goal, ψ2_goal], N;
-        state_names=[:ψ̃_a, :ψ̃_b]
-    )
-    @test qtraj6 isa KetTrajectory
-    @test size(qtraj6[:ψ̃_a], 2) == N
-    @test size(qtraj6[:ψ̃_b], 2) == N
-    @test get_state_name(qtraj6) == :ψ̃_a  # First state name
+    @test get_state_name(qtraj5) == :ψ̃_custom
+    @test haskey(qtraj5.components, :ψ̃_custom)
     
     # Test that time is NOT stored for non-time-dependent systems
     @test !haskey(qtraj.components, :t)
@@ -790,16 +1239,6 @@ end
     Δt_cumsum = [0.0; cumsum(qtraj[:Δt][:])[1:end-1]]
     @test qtraj[:t][:] ≈ Δt_cumsum
     
-    # Test with multiple states
-    ψ2_init = ComplexF64[0.0, 1.0]
-    ψ2_goal = ComplexF64[1.0, 0.0]
-    qtraj2 = KetTrajectory(sys, [ψ_init, ψ2_init], [ψ_goal, ψ2_goal], N)
-    @test qtraj2 isa KetTrajectory
-    @test haskey(qtraj2.components, :t)
-    @test size(qtraj2[:ψ̃1], 2) == N
-    @test size(qtraj2[:ψ̃2], 2) == N
-    @test size(qtraj2[:t], 2) == N
-    
     # Test that time is included in components (but not controls)
     @test :t ∈ keys(qtraj.components)
     @test :t ∉ qtraj.control_names
@@ -874,6 +1313,283 @@ end
     # Test bounds on multiple drives
     @test qtraj.bounds[:u][1] == [-1.0, -1.0]  # Lower bounds
     @test qtraj.bounds[:u][2] == [1.0, 1.0]    # Upper bounds
+end
+
+@testitem "SamplingTrajectory basic construction" begin
+    using PiccoloQuantumObjects
+    using NamedTrajectories
+    
+    # Create systems (different drift Hamiltonians for robust optimization)
+    sys1 = QuantumSystem(GATES[:Z], [GATES[:X]], 1.0, [1.0])
+    sys2 = QuantumSystem(1.1 * GATES[:Z], [GATES[:X]], 1.0, [1.0])
+    systems = [sys1, sys2]
+    
+    # Create base trajectory
+    U_goal = GATES[:H]
+    N = 10
+    base_qtraj = UnitaryTrajectory(sys1, U_goal, N)
+    
+    # Create sampling trajectory for robust optimization
+    sampling_qtraj = SamplingTrajectory(base_qtraj, systems)
+    
+    @test sampling_qtraj isa SamplingTrajectory{UnitaryTrajectory}
+    @test sampling_qtraj isa AbstractQuantumTrajectory
+    
+    # Test accessors
+    @test get_system(sampling_qtraj) === sys1  # Nominal system
+    @test get_systems(sampling_qtraj) === systems
+    @test get_goal(sampling_qtraj) === U_goal
+    @test get_state_name(sampling_qtraj) == :Ũ⃗
+    @test get_control_name(sampling_qtraj) == :u
+    @test get_weights(sampling_qtraj) == [1.0, 1.0]
+    @test get_ensemble_state_names(sampling_qtraj) == [:Ũ⃗_sample_1, :Ũ⃗_sample_2]
+    
+    # Test property forwarding
+    @test sampling_qtraj.base_trajectory === base_qtraj
+    @test sampling_qtraj.systems === systems
+    @test size(sampling_qtraj[:Ũ⃗], 2) == N  # Forwarded to base trajectory
+    @test size(sampling_qtraj[:u], 2) == N
+end
+
+@testitem "SamplingTrajectory with custom weights" begin
+    using PiccoloQuantumObjects
+    using NamedTrajectories
+    
+    # Create systems with different perturbations
+    sys1 = QuantumSystem(GATES[:Z], [GATES[:X]], 1.0, [1.0])
+    sys2 = QuantumSystem(1.1 * GATES[:Z], [GATES[:X]], 1.0, [1.0])
+    sys3 = QuantumSystem(0.9 * GATES[:Z], [GATES[:X]], 1.0, [1.0])
+    systems = [sys1, sys2, sys3]
+    
+    # Custom weights (nominal gets higher weight)
+    weights = [0.5, 0.25, 0.25]
+    
+    # Create base trajectory
+    base_qtraj = UnitaryTrajectory(sys1, GATES[:X], 10)
+    
+    # Create sampling trajectory with weights
+    sampling_qtraj = SamplingTrajectory(base_qtraj, systems; weights=weights)
+    
+    @test get_weights(sampling_qtraj) == weights
+    @test length(get_ensemble_state_names(sampling_qtraj)) == 3
+    @test get_ensemble_state_names(sampling_qtraj) == [:Ũ⃗_sample_1, :Ũ⃗_sample_2, :Ũ⃗_sample_3]
+end
+
+@testitem "SamplingTrajectory with KetTrajectory" begin
+    using PiccoloQuantumObjects
+    using NamedTrajectories
+    
+    # Create systems
+    sys1 = QuantumSystem(GATES[:Z], [GATES[:X]], 1.0, [1.0])
+    sys2 = QuantumSystem(1.1 * GATES[:Z], [GATES[:X]], 1.0, [1.0])
+    systems = [sys1, sys2]
+    
+    # Create base ket trajectory
+    ψ_init = ComplexF64[1.0, 0.0]
+    ψ_goal = ComplexF64[0.0, 1.0]
+    base_qtraj = KetTrajectory(sys1, ψ_init, ψ_goal, 10)
+    
+    # Create sampling trajectory
+    sampling_qtraj = SamplingTrajectory(base_qtraj, systems)
+    
+    @test sampling_qtraj isa SamplingTrajectory{KetTrajectory}
+    @test get_state_name(sampling_qtraj) == :ψ̃
+    @test get_ensemble_state_names(sampling_qtraj) == [:ψ̃_sample_1, :ψ̃_sample_2]
+    @test get_goal(sampling_qtraj) == ψ_goal
+end
+
+@testitem "EnsembleTrajectory basic construction" begin
+    using PiccoloQuantumObjects
+    using NamedTrajectories
+    
+    # Create shared system
+    sys = QuantumSystem(GATES[:Z], [GATES[:X]], 1.0, [1.0])
+    
+    # Create trajectories with different initial/goal states (same system)
+    ψ0 = ComplexF64[1.0, 0.0]
+    ψ1 = ComplexF64[0.0, 1.0]
+    
+    qtraj1 = KetTrajectory(sys, ψ0, ψ1, 10)  # |0⟩ → |1⟩
+    qtraj2 = KetTrajectory(sys, ψ1, ψ0, 10)  # |1⟩ → |0⟩
+    
+    # Create ensemble trajectory
+    ensemble_qtraj = EnsembleTrajectory([qtraj1, qtraj2])
+    
+    @test ensemble_qtraj isa EnsembleTrajectory{KetTrajectory}
+    @test ensemble_qtraj isa AbstractQuantumTrajectory
+    
+    # Test accessors
+    @test get_system(ensemble_qtraj) === sys  # Shared system
+    @test get_state_name(ensemble_qtraj) == :ψ̃
+    @test get_control_name(ensemble_qtraj) == :u
+    @test get_weights(ensemble_qtraj) == [1.0, 1.0]
+    @test get_ensemble_state_names(ensemble_qtraj) == [:ψ̃_init_1, :ψ̃_init_2]
+    
+    # Test goals are from all trajectories
+    goals = get_goal(ensemble_qtraj)
+    @test goals == [ψ1, ψ0]
+    
+    # Test property forwarding
+    @test ensemble_qtraj.trajectories == [qtraj1, qtraj2]
+    @test size(ensemble_qtraj[:ψ̃], 2) == 10  # Forwarded to first trajectory
+    @test size(ensemble_qtraj[:u], 2) == 10
+end
+
+@testitem "EnsembleTrajectory with custom weights" begin
+    using PiccoloQuantumObjects
+    using NamedTrajectories
+    
+    # Create shared system
+    sys = QuantumSystem(GATES[:Z], [GATES[:X]], 1.0, [1.0])
+    
+    # Create 3 trajectories with different state transfers
+    ψ0 = ComplexF64[1.0, 0.0]
+    ψ1 = ComplexF64[0.0, 1.0]
+    ψ_plus = ComplexF64[1.0, 1.0] / sqrt(2)
+    
+    qtraj1 = KetTrajectory(sys, ψ0, ψ1, 10)
+    qtraj2 = KetTrajectory(sys, ψ1, ψ0, 10)
+    qtraj3 = KetTrajectory(sys, ψ0, ψ_plus, 10)
+    
+    # Custom weights
+    weights = [0.5, 0.3, 0.2]
+    
+    # Create ensemble trajectory with weights
+    ensemble_qtraj = EnsembleTrajectory([qtraj1, qtraj2, qtraj3]; weights=weights)
+    
+    @test get_weights(ensemble_qtraj) == weights
+    @test length(get_ensemble_state_names(ensemble_qtraj)) == 3
+    @test get_ensemble_state_names(ensemble_qtraj) == [:ψ̃_init_1, :ψ̃_init_2, :ψ̃_init_3]
+end
+
+@testitem "EnsembleTrajectory with UnitaryTrajectory" begin
+    using PiccoloQuantumObjects
+    using NamedTrajectories
+    
+    # Create shared system
+    sys = QuantumSystem(GATES[:Z], [GATES[:X]], 1.0, [1.0])
+    
+    # Create trajectories for different target gates
+    qtraj1 = UnitaryTrajectory(sys, GATES[:X], 10)
+    qtraj2 = UnitaryTrajectory(sys, GATES[:H], 10)
+    
+    # Create ensemble trajectory
+    ensemble_qtraj = EnsembleTrajectory([qtraj1, qtraj2])
+    
+    @test ensemble_qtraj isa EnsembleTrajectory{UnitaryTrajectory}
+    @test get_state_name(ensemble_qtraj) == :Ũ⃗
+    @test get_ensemble_state_names(ensemble_qtraj) == [:Ũ⃗_init_1, :Ũ⃗_init_2]
+    
+    # Goals are both target unitaries
+    goals = get_goal(ensemble_qtraj)
+    @test goals == [GATES[:X], GATES[:H]]
+end
+
+@testitem "build_sampling_trajectory utility" begin
+    using PiccoloQuantumObjects
+    using NamedTrajectories
+    
+    # Create a base trajectory
+    sys = QuantumSystem(GATES[:Z], [GATES[:X]], 1.0, [1.0])
+    base_qtraj = UnitaryTrajectory(sys, GATES[:H], 10)
+    base_traj = get_trajectory(base_qtraj)
+    
+    # Build sampling trajectory
+    n_samples = 3
+    new_traj, state_names = build_sampling_trajectory(base_traj, :Ũ⃗, n_samples)
+    
+    # Check state names use _sample_ suffix
+    @test state_names == [:Ũ⃗_sample_1, :Ũ⃗_sample_2, :Ũ⃗_sample_3]
+    
+    # Check that new trajectory has sample state components
+    @test haskey(new_traj.components, :Ũ⃗_sample_1)
+    @test haskey(new_traj.components, :Ũ⃗_sample_2)
+    @test haskey(new_traj.components, :Ũ⃗_sample_3)
+    
+    # Check that original state is NOT in new trajectory
+    @test !haskey(new_traj.components, :Ũ⃗)
+    
+    # Check that controls are preserved
+    @test haskey(new_traj.components, :u)
+    @test haskey(new_traj.components, :Δt)
+    
+    # Check initial conditions for each sample state
+    @test haskey(new_traj.initial, :Ũ⃗_sample_1)
+    @test haskey(new_traj.initial, :Ũ⃗_sample_2)
+    @test haskey(new_traj.initial, :Ũ⃗_sample_3)
+    @test new_traj.initial[:Ũ⃗_sample_1] == base_traj.initial[:Ũ⃗]
+    
+    # Check goal conditions for each sample state
+    @test haskey(new_traj.goal, :Ũ⃗_sample_1)
+    @test haskey(new_traj.goal, :Ũ⃗_sample_2)
+    @test haskey(new_traj.goal, :Ũ⃗_sample_3)
+    @test new_traj.goal[:Ũ⃗_sample_1] == base_traj.goal[:Ũ⃗]
+end
+
+@testitem "build_ensemble_trajectory_from_trajectories utility" begin
+    using PiccoloQuantumObjects
+    using NamedTrajectories
+    
+    # Create shared system
+    sys = QuantumSystem(GATES[:Z], [GATES[:X]], 1.0, [1.0])
+    
+    # Create trajectories with different initial/goal states
+    ψ0 = ComplexF64[1.0, 0.0]
+    ψ1 = ComplexF64[0.0, 1.0]
+    
+    qtraj1 = KetTrajectory(sys, ψ0, ψ1, 10)
+    qtraj2 = KetTrajectory(sys, ψ1, ψ0, 10)
+    
+    # Build ensemble trajectory
+    new_traj, state_names = build_ensemble_trajectory_from_trajectories([qtraj1, qtraj2])
+    
+    # Check state names use _init_ suffix
+    @test state_names == [:ψ̃_init_1, :ψ̃_init_2]
+    
+    # Check that new trajectory has ensemble state components
+    @test haskey(new_traj.components, :ψ̃_init_1)
+    @test haskey(new_traj.components, :ψ̃_init_2)
+    
+    # Check that original state is NOT in new trajectory
+    @test !haskey(new_traj.components, :ψ̃)
+    
+    # Check initial conditions are from each trajectory
+    @test new_traj.initial[:ψ̃_init_1] == get_trajectory(qtraj1).initial[:ψ̃]
+    @test new_traj.initial[:ψ̃_init_2] == get_trajectory(qtraj2).initial[:ψ̃]
+    
+    # Check goal conditions are from each trajectory
+    @test new_traj.goal[:ψ̃_init_1] == get_trajectory(qtraj1).goal[:ψ̃]
+    @test new_traj.goal[:ψ̃_init_2] == get_trajectory(qtraj2).goal[:ψ̃]
+end
+
+@testitem "update_base_trajectory utility for SamplingTrajectory" begin
+    using PiccoloQuantumObjects
+    using NamedTrajectories
+    
+    # Create systems
+    sys1 = QuantumSystem(GATES[:Z], [GATES[:X]], 1.0, [1.0])
+    sys2 = QuantumSystem(1.1 * GATES[:Z], [GATES[:X]], 1.0, [1.0])
+    systems = [sys1, sys2]
+    weights = [0.6, 0.4]
+    
+    # Create sampling trajectory
+    base_qtraj = UnitaryTrajectory(sys1, GATES[:H], 10)
+    sampling_qtraj = SamplingTrajectory(base_qtraj, systems; weights=weights)
+    
+    # Create a new base trajectory (different goal)
+    new_base_qtraj = UnitaryTrajectory(sys1, GATES[:X], 10)
+    
+    # Update the sampling trajectory
+    updated_sampling = update_base_trajectory(sampling_qtraj, new_base_qtraj)
+    
+    # Check that systems, weights, and state names are preserved
+    @test get_systems(updated_sampling) === systems
+    @test get_weights(updated_sampling) == weights
+    @test get_ensemble_state_names(updated_sampling) == get_ensemble_state_names(sampling_qtraj)
+    
+    # Check that base trajectory is updated
+    @test updated_sampling.base_trajectory === new_base_qtraj
+    @test get_goal(updated_sampling) === GATES[:X]
 end
 
 end  # module QuantumTrajectories
