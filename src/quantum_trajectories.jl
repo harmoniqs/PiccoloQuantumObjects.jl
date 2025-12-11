@@ -22,7 +22,7 @@ export DensityTrajectory
 export EnsembleTrajectory
 export SamplingTrajectory
 export get_trajectory, get_system, get_goal, get_state_name, get_control_name, get_state, get_controls
-export get_ensemble_state_names, get_systems, get_weights
+export get_ensemble_state_names, get_systems, get_weights, get_combined_trajectory
 export unitary_geodesic, unitary_linear_interpolation, linear_interpolation
 export build_sampling_trajectory, build_ensemble_trajectory, build_ensemble_trajectory_from_trajectories
 export update_base_trajectory
@@ -265,11 +265,13 @@ struct UnitaryTrajectory <: AbstractQuantumTrajectory
         else
             Ũ⃗ = unitary_linear_interpolation(U_init, U_goal, N)
         end
+
+        u_maxs = [sys.drive_bounds[i][2] for i in 1:n_drives]
         
         # Initialize controls (zero at boundaries)
         u = hcat(
             zeros(n_drives),
-            randn(n_drives, N - 2) * 0.01,
+            mapslices(u_ -> u_ .* u_maxs, 2rand(n_drives, N - 2) .- 1, dims=1),
             zeros(n_drives)
         )
         
@@ -991,6 +993,34 @@ function build_ensemble_trajectory_from_trajectories(
     )
     
     return new_traj, state_names
+end
+
+"""
+    build_ensemble_trajectory(qtraj::EnsembleTrajectory) -> Tuple{NamedTrajectory, Vector{Symbol}}
+
+Build a combined NamedTrajectory from an EnsembleTrajectory.
+
+Creates a trajectory with separate state variables for each member (e.g., `:ψ̃_init_1`, `:ψ̃_init_2`).
+Controls and other components are shared.
+
+# Returns
+- `Tuple{NamedTrajectory, Vector{Symbol}}`: Combined trajectory and list of state names
+"""
+function build_ensemble_trajectory(qtraj::EnsembleTrajectory)
+    return build_ensemble_trajectory_from_trajectories(qtraj.trajectories)
+end
+
+"""
+    get_trajectory(qtraj::EnsembleTrajectory) -> NamedTrajectory
+
+Return the combined trajectory with all ensemble states.
+
+This builds a NamedTrajectory with separate state variables for each ensemble member.
+For efficiency, consider caching this result if calling multiple times.
+"""
+function get_combined_trajectory(qtraj::EnsembleTrajectory)
+    traj, _ = build_ensemble_trajectory(qtraj)
+    return traj
 end
 
 """

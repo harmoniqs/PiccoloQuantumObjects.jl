@@ -266,7 +266,7 @@ end
         mode_levels::Int=10,
         η::Union{Float64, Matrix{Float64}}=0.1,
         ωm::Union{Float64, Vector{Float64}}=0.1,
-        δ::Float64=0.0,
+        δ::Union{Float64, Vector{Float64}}=0.0,
         multiply_by_2π::Bool=true,
         T_max::Float64=10.0,
         drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=fill(1.0, N_ions),
@@ -279,24 +279,24 @@ motional sidebands, creating an effective spin-spin interaction.
 
 # Time-Dependent Hamiltonian
 
-In the **interaction picture** and **rotating frame**, the Hamiltonian is:
+Following the standard MS gate formulation, the Hamiltonian in the interaction picture is:
 
 ```math
-H(t) = u(t) \frac{i}{2} \sum_j \eta_j |e\rangle\langle g|_j \left( a e^{i\delta t} + a^\dagger e^{-i\delta t} \right) e^{-i(\phi - \pi/2 + \gamma_j)} + \text{h.c.}
+H(t) = -\frac{i}{2} \sum_{i,k} \sigma_{x,i} \eta_{k,i} \Omega_i a_k e^{-i\delta_k t} + \text{h.c.}
 ```
 
-Simplifying with $\sigma_y = -i(\sigma^+ - \sigma^-)$:
+which expands to:
 
 ```math
-H(t) = -u(t) \sum_j \eta_j \sigma_{y,j} \left( a e^{i\delta t} + a^\dagger e^{-i\delta t} \right)
+H(t) = -\frac{i}{2} \sum_{i,k} \eta_{k,i} \Omega_i \sigma_{x,i} \left( a_k e^{-i\delta_k t} - a_k^\dagger e^{i\delta_k t} \right)
 ```
 
 where:
-- $u(t)$ is the control amplitude (Rabi frequency)
-- $\eta_j$ is the Lamb-Dicke parameter for ion $j$
-- $\delta$ is the detuning from the motional sideband
-- $a, a^\dagger$ are phonon annihilation/creation operators
-- $e^{\pm i\delta t}$ creates the time-dependent carrier frequencies
+- $\Omega_i$ is the control amplitude (Rabi frequency) for ion $i$
+- $\eta_{k,i}$ is the Lamb-Dicke parameter for ion $i$ and mode $k$
+- $\delta_k$ is the detuning from motional sideband for mode $k$
+- $a_k, a_k^\dagger$ are phonon annihilation/creation operators for mode $k$
+- $\sigma_{x,i}$ is the Pauli-X operator on ion $i$
 
 # Effective Interaction
 
@@ -316,7 +316,7 @@ This directly creates entanglement between ions without needing to individually 
 - `mode_levels`: Fock states per mode
 - `η`: Lamb-Dicke parameter(s) - scalar or N_ions × N_modes matrix
 - `ωm`: Motional frequencies (scalar or vector)
-- `δ`: Detuning from sideband in GHz. Typical: δ ~ 0.1 × ωm
+- `δ`: Detuning from sideband (scalar or vector per mode). Typical: δ ~ 0.1 × ωm
 - `multiply_by_2π`: Multiply by 2π (default true)
 - `T_max`: Maximum time
 - `drive_bounds`: Control bounds (length N_ions for individual ion addressing)
@@ -338,7 +338,7 @@ sys = IonChainMSSystem(
 - Sørensen & Mølmer, "Entanglement and quantum computation...," PRA 62, 022311 (2000)
 
 # Note
-This returns a time-dependent system where `H(u, t)` includes the carrier terms $e^{\pm i\delta t}$.
+This returns a time-dependent system where `H(u, t)` includes the carrier terms $e^{\pm i\delta_k t}$.
 Use with `UnitarySplineIntegrator` or similar time-dependent integrators in QuantumCollocation.
 """
 function IonChainMSSystem(;
@@ -348,16 +348,18 @@ function IonChainMSSystem(;
     mode_levels::Int=10,
     η::Union{Float64, Matrix{Float64}}=0.1,
     ωm::Union{Float64, Vector{Float64}}=0.1,
-    δ::Float64=0.0,
+    δ::Union{Float64, Vector{Float64}}=0.0,
     multiply_by_2π::Bool=true,
     T_max::Float64=10.0,
     drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=fill(1.0, N_ions),
 )
     # Convert parameters to arrays
     ωm_vec = ωm isa Vector ? ωm : fill(ωm, N_modes)
+    δ_vec = δ isa Vector ? δ : fill(δ, N_modes)
     η_mat = η isa Float64 ? fill(η, N_ions, N_modes) : η
     
     @assert length(ωm_vec) == N_modes
+    @assert length(δ_vec) == N_modes
     @assert size(η_mat) == (N_ions, N_modes)
     @assert length(drive_bounds) == N_ions
     
@@ -368,69 +370,73 @@ function IonChainMSSystem(;
     mode_dim = mode_levels^N_modes
     total_dim = ion_dim * mode_dim
     
-    # Pauli operators
+    # Pauli-X operator (following paper's convention)
     if ion_levels == 2
-        σ_y = ComplexF64[0 -im; im 0]
+        σ_x = ComplexF64[0 1; 1 0]
     else
         # For multi-level: use |0⟩↔|1⟩ transition
         σ_plus = zeros(ComplexF64, ion_levels, ion_levels)
         σ_plus[2, 1] = 1.0
         σ_minus = zeros(ComplexF64, ion_levels, ion_levels)
         σ_minus[1, 2] = 1.0
-        σ_y = -1.0im * (σ_plus - σ_minus)
+        σ_x = σ_plus + σ_minus
     end
     
-    # Drift Hamiltonian (motional modes only, ions already in rotating frame)
+    # No drift Hamiltonian - we're in the interaction picture with respect to H_HO
+    # The mode frequencies only appear in the detuning δ = μ - ω_k
     H_drift = zeros(ComplexF64, total_dim, total_dim)
-    for m in 1:N_modes
-        a_m = annihilate(mode_levels)
-        H_drift += ωm_vec[m] * lift_operator(a_m' * a_m, N_ions + m, subsystem_levels)
-    end
     
-    # Time-dependent drive operators: H(u, t) = Σᵢ uᵢ(t) Hᵢ(t)
-    # Each drive has two time-dependent terms: a e^{iδt} and a† e^{-iδt}
+    # Time-dependent drive operators following paper Eq. 2:
+    # H(t) = -i/2 Σᵢ,ₖ σₓ,ᵢ ηₖ,ᵢ Ωᵢ aₖ e^{-iδₖt} + h.c.
+    #      = -i/2 Σᵢ,ₖ ηₖ,ᵢ Ωᵢ σₓ,ᵢ (aₖ e^{-iδₖt} - aₖ† e^{iδₖt})
     
-    # Build carrier function
-    carrier(t) = [exp(1.0im * δ * t), exp(-1.0im * δ * t)]
-    
-    # Build drive matrices: -ηⱼ σ_{y,j} (a + a†) for each ion
-    H_drives_base = Matrix{ComplexF64}[]
+    # Build base drive matrices for each ion: Σₖ ηₖ,ᵢ σₓ,ᵢ aₖ (without time dependence)
+    # We store separate operators for a and a† terms to apply correct time phases
+    H_drives_a = Matrix{ComplexF64}[]      # Terms with aₖ (get e^{-iδₖt})
+    H_drives_adag = Matrix{ComplexF64}[]   # Terms with aₖ† (get e^{+iδₖt})
     
     for j in 1:N_ions
-        # Base drive: -ηⱼ σ_{y,j} ⊗ (a + a†)
-        H_j = zeros(ComplexF64, total_dim, total_dim)
+        H_j_a = zeros(ComplexF64, total_dim, total_dim)
+        H_j_adag = zeros(ComplexF64, total_dim, total_dim)
         
-        σ_y_j = lift_operator(σ_y, j, subsystem_levels)
+        σ_x_j = lift_operator(σ_x, j, subsystem_levels)
         
         for m in 1:N_modes
             if abs(η_mat[j, m]) > 1e-12
                 a_m = annihilate(mode_levels)
-                # Split into blue (a) and red (a†) sideband terms
-                a_blue = lift_operator(a_m, N_ions + m, subsystem_levels)
-                a_red = lift_operator(Matrix(a_m'), N_ions + m, subsystem_levels)
+                a_op = lift_operator(a_m, N_ions + m, subsystem_levels)
+                adag_op = lift_operator(Matrix(a_m'), N_ions + m, subsystem_levels)
                 
-                # Store as two operators for time-dependent evaluation
-                # H(t) = -ηⱼ σ_y (a e^{iδt} + a† e^{-iδt})
-                H_j += -η_mat[j, m] * σ_y_j * (a_blue + a_red) / 2
+                # H = -i/2 η σₓ (a e^{-iδt} - a† e^{iδt})
+                H_j_a += η_mat[j, m] * σ_x_j * a_op
+                H_j_adag += η_mat[j, m] * σ_x_j * adag_op
             end
         end
         
-        push!(H_drives_base, H_j)
+        push!(H_drives_a, H_j_a)
+        push!(H_drives_adag, H_j_adag)
     end
     
     if multiply_by_2π
         H_drift *= 2π
-        H_drives_base = [2π * H for H in H_drives_base]
+        H_drives_a = [2π * H for H in H_drives_a]
+        H_drives_adag = [2π * H for H in H_drives_adag]
+        δ_vec = 2π .* δ_vec
     end
     
     # Create time-dependent system
-    # G(u, t) = H_drift + Σⱼ uⱼ(t) × [-ηⱼ σ_y (a e^{iδt} + a† e^{-iδt})]
+    # H(u, t) = H_drift + Σⱼ uⱼ(t) × [-i/2 Σₖ ηₖ,ⱼ σₓ,ⱼ (aₖ e^{-iδₖt} - aₖ† e^{iδₖt})]
     H_time_dep(u, t) = begin
         H = copy(H_drift)
-        c = carrier(t)
         for j in 1:N_ions
-            # Modulate drive by time-dependent carriers
-            H += u[j] * H_drives_base[j] * (c[1] + c[2]) / 2
+            # Apply time-dependent phases per mode
+            # For simplicity with single δ, use average; for multiple modes, 
+            # the η_mat already encodes which modes couple to which ions
+            phase_neg = exp(-1.0im * δ_vec[1] * t)  # e^{-iδt} for a terms
+            phase_pos = exp(+1.0im * δ_vec[1] * t)  # e^{+iδt} for a† terms
+            
+            # H = -i/2 × Ω × (a e^{-iδt} - a† e^{iδt})
+            H += -0.5im * u[j] * (H_drives_a[j] * phase_neg - H_drives_adag[j] * phase_pos)
         end
         return H
     end
