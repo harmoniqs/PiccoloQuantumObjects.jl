@@ -1,5 +1,3 @@
-module NewRollouts
-
 module PiccoloSymbolicInterfaces
 
 export KetODEProblem
@@ -12,43 +10,35 @@ using SciMLBase
 using SymbolicIndexingInterface
 const SII = SymbolicIndexingInterface
 
-"Scalar symbolic variable (e.g. x_1, u_2)"
-struct PSym
-    name::Symbol
-end
-
-"""
-Vector symbolic variable (e.g. x, u) that expands to scalars.
-
-SymbolicIndexingInterface can always reduce “vector symbol” to list of scalar symbols, so downstream SciML code that expects scalars still works.
-"""
-struct PVecSym
-    name::Symbol
-    n::Int
-end
-
-# Tell SII these are symbolic and have names
-SII.symbolic_type(::Type{PSym})    = SII.ScalarSymbolic()
-SII.symbolic_type(::Type{PVecSym}) = SII.ArraySymbolic()
-
-SII.hasname(::PSym)    = true
-SII.hasname(::PVecSym) = true
-
-SII.getname(s::PSym)    = s.name
-SII.getname(s::PVecSym) = s.name
-
-# How vector symbols expand into scalar symbols
-Base.collect(s::PVecSym) = [PSym(Symbol(s.name, :_, i)) for i in 1:s.n]
-
-# Convenience so users can write x[1] in the DSL
-Base.getindex(s::PVecSym, i::Int) = collect(s)[i]
-Base.length(s::PVecSym) = s.n
-
 # ============================================================ #
-# Define DSL for Piccolo
+# DSL for Piccolo
 # ============================================================ #
 
-const SymbolIndex = Union{Int,AbstractVector{Int}}
+const SymbolIndex = Union{
+    Int,
+    AbstractVector{Int},
+    CartesianIndex{N} where N,
+    CartesianIndices{N} where N
+}
+
+function _index(name::Symbol, n::Int)
+    index = Dict{Symbol, SymbolIndex}()
+    for i = 1:n
+        index[Symbol(name, :_, i)] = i
+    end
+    index[name] = 1:n
+    return index
+end
+
+function _index(name::Symbol, n1::Int, n2::Int)
+    idx = Dict{Symbol, SymbolIndex}()
+    for i in 1:n1, j in 1:n2
+        idx[Symbol(name, :_, i, :_, j)] = CartesianIndex(i, j)
+    end
+    # block symbol: preserves matrix shape
+    idx[name] = CartesianIndices((n1, n2))
+    return idx
+end
 
 struct PiccoloRolloutSystem{T1 <: SymbolIndex, T2 <: SymbolIndex}
     state_index::Dict{Symbol, T1}
@@ -64,23 +54,22 @@ function PiccoloRolloutSystem(
     defaults::Dict{Symbol,Float64}=Dict{Symbol,Float64}()
 )
     state_name, n_state = state
-    x = PVecSym(state_name, n_state)
     control_name, n_control = control
-    u = PVecSym(control_name, n_control)
+    state_index = _index(state_name, n_state)
+    control_index = _index(control_name, n_control)
+    return PiccoloRolloutSystem(state_index, control_index, timestep_name, defaults)
+end
 
-    # Create scalar coordinates and vector coordinate
-    state_index = Dict{Symbol, SymbolIndex}()
-    for (i, s) in enumerate(collect(x))
-        state_index[SII.getname(s)] = i
-    end
-    state_index[state_name] = 1:n_state
-
-    control_index = Dict{Symbol, SymbolIndex}()
-    for (i, s) in enumerate(collect(u))
-        control_index[SII.getname(s)] = i
-    end
-    control_index[control_name] = 1:n_control
-
+function PiccoloRolloutSystem(
+    state::Pair{Symbol, Tuple{Int, Int}}, 
+    control::Pair{Symbol, Int};
+    timestep_name::Symbol=:t,
+    defaults::Dict{Symbol,Float64}=Dict{Symbol,Float64}()
+)
+    state_name, (n1, n2) = state
+    control_name, n_control = control
+    state_index = _index(state_name, n1, n2)
+    control_index = _index(control_name, n_control)
     return PiccoloRolloutSystem(state_index, control_index, timestep_name, defaults)
 end
 
@@ -88,41 +77,32 @@ struct PiccoloRolloutControl{F}
     u::F
 end
 
-# TODO: 
-# - UnitaryODEProblem
-# - KetODEProblem
-
-"""
-Implement a quantum system rollout.
-"""
-function SciMLBase.ODEProblem(
-    sys::AbstractQuantumSystem, u, x0, T; 
-    state_name=:x, 
-    control_name=:u, 
-    kwargs...
-)
-    p = PiccoloRolloutControl(u)
-	rhs!(dx, x, p, t) = mul!(dx, sys.H(p.u(t), t), x, -im, 1.0)
-    sii_sys = PiccoloRolloutSystem(state_name => sys.levels, control_name => sys.n_drives)
-	return ODEProblem(ODEFunction(rhs!; sys = sii_sys), x0, (0, T), p; kwargs...)
-end
-
 function KetODEProblem(
     sys::AbstractQuantumSystem, u, ψ0, T; 
-    state_name=:ψ, 
+    state_name=:ψ,
+    control_name=:u,
     kwargs...
 )
-	return ODEProblem(sys, u, ψ0, T, state_name=state_name, kwargs...)
+    # TODO: In-place H buffer?
+	rhs!(dx, x, p, t) = mul!(dx, sys.H(p.u(t), t), x, -im, 1.0)
+
+    p = PiccoloRolloutControl(u)
+    sii_sys = PiccoloRolloutSystem(state_name => sys.levels, control_name => sys.n_drives)
+	return ODEProblem(ODEFunction(rhs!; sys = sii_sys), ψ0, (0, T), p; kwargs...)
 end
 
-# TODO: This doesn't work yet
 function UnitaryODEProblem(
     sys::AbstractQuantumSystem, u, T; 
     state_name=:U, 
+    control_name=:u,
     kwargs...
 )
+	rhs!(dx, x, p, t) = mul!(dx, sys.H(p.u(t), t), x, -im, 1.0)
+
+    p = PiccoloRolloutControl(u)
     U0 = Matrix{ComplexF64}(I, sys.levels, sys.levels)
-	return ODEProblem(sys, u, U0, T; state_name=state_name, kwargs...)
+    sii_sys = PiccoloRolloutSystem(state_name => (sys.levels, sys.levels), control_name => sys.n_drives)
+	return ODEProblem(ODEFunction(rhs!; sys = sii_sys), U0, (0, T), p; kwargs...)
 end
 
 # ============================================================ #
@@ -131,9 +111,7 @@ end
 # https://docs.sciml.ai/SymbolicIndexingInterface/
 # ============================================================ #
 
-_name(sym::Symbol) = sym
-_name(sym::PSym) = sym.name          
-_name(sym::PVecSym) = sym.name       
+_name(sym::Symbol) = sym   
 _name(sym) = nothing
 
 # ------------------------------------------
@@ -201,9 +179,6 @@ function SII.observed(prob::SciMLBase.ODEProblem, sym)
     sys = prob.f.sys
     sys isa PiccoloRolloutSystem && return SII.observed(sys, sym)
     return invoke(SII.observed, Tuple{SciMLBase.AbstractSciMLProblem, Any}, prob, sym)
-end
-
-
 end
 
 
