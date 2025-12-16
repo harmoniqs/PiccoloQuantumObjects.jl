@@ -5,10 +5,10 @@ Rollouts of quantum systems using SciML's DifferentialEquations.jl. Construct a 
 
 Provides a domain specific language for quantum system rollouts, with functions
 - KetODEProblem: Ket rollouts
-- UnitaryODEProblem: For unitary gate synthesis
+- UnitaryODEProblem: Unitary rollouts
+- DensityODEProblem: Density matrix rollouts (open systems)
 
 """
-# TODO: Also include helper functions for fidelity.
 
 export KetODEProblem
 export UnitaryODEProblem
@@ -86,50 +86,43 @@ function PiccoloRolloutSystem(
     return PiccoloRolloutSystem(state_index, control_index, timestep_name, defaults)
 end
 
-struct PiccoloRolloutControl{F}
-    u::F
-end
 
 function KetODEProblem(
-    sys::AbstractQuantumSystem, u::Function, ψ0::Vector{ComplexF64}, T::Real; 
+    sys::AbstractQuantumSystem, u::F, ψ0::Vector{ComplexF64}, T::Real; 
     state_name::Symbol=:ψ,
     control_name::Symbol=:u,
     kwargs...
-)
-	rhs!(dx, x, p, t) = mul!(dx, sys.H(p.u(t), t), x, -im, 0.0)
-
-    p = PiccoloRolloutControl(u)
+) where F
+	rhs!(dx, x, p, t) = mul!(dx, sys.H(u(t), t), x, -im, 0.0)
     sii_sys = PiccoloRolloutSystem(state_name => sys.levels, control_name => sys.n_drives)
-	return ODEProblem(ODEFunction(rhs!; sys = sii_sys), ψ0, (0, T), p; kwargs...)
+	return ODEProblem(ODEFunction(rhs!; sys = sii_sys), ψ0, (0, T); kwargs...)
 end
 
 function UnitaryODEProblem(
-    sys::AbstractQuantumSystem, u::Function, T::Real; 
+    sys::AbstractQuantumSystem, u::F, T::Real; 
     state_name::Symbol=:U, 
     control_name::Symbol=:u,
     kwargs...
-)
-	rhs!(dx, x, p, t) = mul!(dx, sys.H(p.u(t), t), x, -im, 0.0)
-
-    p = PiccoloRolloutControl(u)
+) where F
+	rhs!(dx, x, p, t) = mul!(dx, sys.H(u(t), t), x, -im, 0.0)
     U0 = Matrix{ComplexF64}(I, sys.levels, sys.levels)
     sii_sys = PiccoloRolloutSystem(
         state_name => (sys.levels, sys.levels), control_name => sys.n_drives)
-	return ODEProblem(ODEFunction(rhs!; sys = sii_sys), U0, (0, T), p; kwargs...)
+	return ODEProblem(ODEFunction(rhs!; sys = sii_sys), U0, (0, T); kwargs...)
 end
 
 function DensityODEProblem(
-    sys::OpenQuantumSystem, u::Function, ρ0::Matrix{ComplexF64}, T::Real; 
+    sys::OpenQuantumSystem, u::F, ρ0::Matrix{ComplexF64}, T::Real; 
     state_name::Symbol=:ρ,
     control_name::Symbol=:u,
     kwargs...
-)
+) where F
     Ls = sys.dissipation_operators
     Ks = map(L -> adjoint(L) * L, Ls)  # precompute L†L once
     tmp = similar(ρ0)  # buffer
 
     rhs!(dρ, ρ, p, t) = begin
-        Ht = sys.H(p.u(t), t)
+        Ht = sys.H(u(t), t)
 
         # dρ = -im*(Hρ - ρH)  (accumulate directly)
         mul!(dρ, Ht, ρ, -im, 0.0)   # dρ = -im*H*ρ
@@ -147,10 +140,9 @@ function DensityODEProblem(
         return nothing
     end
 
-    p = PiccoloRolloutControl(u)
     sii_sys = PiccoloRolloutSystem(
         state_name => (sys.levels, sys.levels), control_name => sys.n_drives)
-	return ODEProblem(ODEFunction(rhs!; sys = sii_sys), ρ0, (0, T), p; kwargs...)
+	return ODEProblem(ODEFunction(rhs!; sys = sii_sys), ρ0, (0, T); kwargs...)
 end
 
 
@@ -183,51 +175,7 @@ SII.is_parameter(::PiccoloRolloutSystem, _) = false
 SII.parameter_index(::PiccoloRolloutSystem, _) = nothing
 SII.parameter_symbols(::PiccoloRolloutSystem) = Symbol[]
 
-# ------------------------------------------
-# Controls
-# ------------------------------------------
-# “Controls are observed via parameters (p.u(t)), not solved variables, so they should not be in the ODE state vector. That avoids sol.u.u / sol.u.ψ confusion and keeps the ODE state dimension = n_state.”
-
-SII.is_observed(sys::PiccoloRolloutSystem, sym) = haskey(sys.control_index, _name(sym))
-
-# Prefer parameter_observed: control depends only on (p,t), not on state u
-function SII.parameter_observed(sys::PiccoloRolloutSystem, sym)
-    @assert SII.is_time_dependent(sys)
-    s = _name(sym)
-    haskey(sys.control_index, s) || return nothing
-    idx = sys.control_index[s]
-    return (p, t) -> (@inbounds p.u(t)[idx])
-end
-
-# Provide observed() too (some tooling expects it); just wrap parameter_observed.
-function SII.observed(sys::PiccoloRolloutSystem, sym)
-    g = SII.parameter_observed(sys, sym)
-    g === nothing && error("Not an observed symbol: $sym")
-    return SII.is_time_dependent(sys) ? ((u, p, t) -> g(p, t)) : ((u, p) -> g(p))
-end
-
-SII.all_variable_symbols(sys::PiccoloRolloutSystem) =
-    vcat(SII.variable_symbols(sys), collect(keys(sys.control_index)))
-SII.all_symbols(sys::PiccoloRolloutSystem) =
-    vcat(SII.all_variable_symbols(sys), SII.independent_variable_symbols(sys))
-
-# ------------------------------------------
-# route SciMLBase problems/sols
-# ------------------------------------------
-# The generic SII methods for SciMLBase problems forward observed() through SciMLBase, which triggers the :u -> getproperty(sys,:u) recursion route.
-# Intercept just ODEProblem (covers ODESolution via forwarding) when sys isa PiccoloRolloutSystem.
-
-function SII.is_observed(prob::SciMLBase.ODEProblem, sym)
-    sys = prob.f.sys
-    sys isa PiccoloRolloutSystem && return SII.is_observed(sys, sym)
-    return invoke(SII.is_observed, Tuple{SciMLBase.AbstractSciMLProblem, Any}, prob, sym)
-end
-
-function SII.observed(prob::SciMLBase.ODEProblem, sym)
-    sys = prob.f.sys
-    sys isa PiccoloRolloutSystem && return SII.observed(sys, sym)
-    return invoke(SII.observed, Tuple{SciMLBase.AbstractSciMLProblem, Any}, prob, sym)
-end
+SII.is_observed(sys::PiccoloRolloutSystem, sym) = false
 
 # *************************************************************************** #
 
@@ -241,7 +189,7 @@ end
 
     # test default
     sol1 = solve(rollout)
-    @test sol1[:u] ≈ u.(sol1.t)
+    @test sol1[:ψ] ≈ sol1.u
 
     # test solve kwargs
     sol2 = solve(rollout, dense=false, save_everystep=false, save_start=false, save_end=true)
@@ -264,7 +212,6 @@ end
     # test default
     sol1 = solve(rollout)
     @test sol1[:U] ≈ sol1.u
-    @test sol1[:u] ≈ u.(sol1.t)
 
     # test solve kwargs
     sol2 = solve(rollout, dense=false, save_everystep=false, save_start=false, save_end=true)
@@ -292,7 +239,6 @@ end
     # test default symbolic access
     sol1 = solve(rollout)
     @test sol1[:ρ] ≈ sol1.u
-    @test sol1[:u] ≈ u.(sol1.t)
 
     # test solve kwargs
     sol2 = solve(rollout, dense=false, save_everystep=false, save_start=false, save_end=true)
