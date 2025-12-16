@@ -12,7 +12,7 @@ Provides a domain specific language for quantum system rollouts, with functions
 
 export KetODEProblem
 export UnitaryODEProblem
-# TODO: DensityODEProblem
+export DensityODEProblem
 
 using LinearAlgebra
 using SciMLBase
@@ -20,7 +20,7 @@ using SymbolicIndexingInterface
 const SII = SymbolicIndexingInterface
 using TestItems
 
-using ..QuantumSystems: AbstractQuantumSystem
+using ..QuantumSystems
 
 
 # ------------------------------------------------------------ #
@@ -91,13 +91,12 @@ struct PiccoloRolloutControl{F}
 end
 
 function KetODEProblem(
-    sys::AbstractQuantumSystem, u, ψ0, T; 
-    state_name=:ψ,
-    control_name=:u,
+    sys::AbstractQuantumSystem, u::Function, ψ0::Vector{ComplexF64}, T::Real; 
+    state_name::Symbol=:ψ,
+    control_name::Symbol=:u,
     kwargs...
 )
-    # TODO: In-place H buffer?
-	rhs!(dx, x, p, t) = mul!(dx, sys.H(p.u(t), t), x, -im, 1.0)
+	rhs!(dx, x, p, t) = mul!(dx, sys.H(p.u(t), t), x, -im, 0.0)
 
     p = PiccoloRolloutControl(u)
     sii_sys = PiccoloRolloutSystem(state_name => sys.levels, control_name => sys.n_drives)
@@ -105,18 +104,55 @@ function KetODEProblem(
 end
 
 function UnitaryODEProblem(
-    sys::AbstractQuantumSystem, u, T; 
-    state_name=:U, 
-    control_name=:u,
+    sys::AbstractQuantumSystem, u::Function, T::Real; 
+    state_name::Symbol=:U, 
+    control_name::Symbol=:u,
     kwargs...
 )
-	rhs!(dx, x, p, t) = mul!(dx, sys.H(p.u(t), t), x, -im, 1.0)
+	rhs!(dx, x, p, t) = mul!(dx, sys.H(p.u(t), t), x, -im, 0.0)
 
     p = PiccoloRolloutControl(u)
     U0 = Matrix{ComplexF64}(I, sys.levels, sys.levels)
-    sii_sys = PiccoloRolloutSystem(state_name => (sys.levels, sys.levels), control_name => sys.n_drives)
+    sii_sys = PiccoloRolloutSystem(
+        state_name => (sys.levels, sys.levels), control_name => sys.n_drives)
 	return ODEProblem(ODEFunction(rhs!; sys = sii_sys), U0, (0, T), p; kwargs...)
 end
+
+function DensityODEProblem(
+    sys::OpenQuantumSystem, u::Function, ρ0::Matrix{ComplexF64}, T::Real; 
+    state_name::Symbol=:ρ,
+    control_name::Symbol=:u,
+    kwargs...
+)
+    Ls = sys.dissipation_operators
+    Ks = map(L -> adjoint(L) * L, Ls)  # precompute L†L once
+    tmp = similar(ρ0)  # buffer
+
+    rhs!(dρ, ρ, p, t) = begin
+        Ht = sys.H(p.u(t), t)
+
+        # dρ = -im*(Hρ - ρH)  (accumulate directly)
+        mul!(dρ, Ht, ρ, -im, 0.0)   # dρ = -im*H*ρ
+        mul!(dρ, ρ, Ht,  im, 1.0)   # dρ +=  im*ρ*H
+
+        # dρ += Σ [ LρL† - 1/2(Kρ + ρK) ]
+        @inbounds for (L, K) in zip(Ls, Ks)
+            mul!(tmp, L, ρ)
+            mul!(dρ, tmp, adjoint(L), 1.0, 1.0)  # dρ += tmp*L†
+
+            mul!(dρ, K, ρ, -0.5, 1.0)
+            mul!(dρ, ρ, K, -0.5, 1.0)
+        end
+
+        return nothing
+    end
+
+    p = PiccoloRolloutControl(u)
+    sii_sys = PiccoloRolloutSystem(
+        state_name => (sys.levels, sys.levels), control_name => sys.n_drives)
+	return ODEProblem(ODEFunction(rhs!; sys = sii_sys), ρ0, (0, T), p; kwargs...)
+end
+
 
 # ------------------------------------------------------------ #
 # Minimal interface 
@@ -201,20 +237,20 @@ end
     sys = QuantumSystem([PAULIS.X, PAULIS.Y], 1.0, [1.0, 1.0])
     ψ0 = ComplexF64[1, 0]
     u = t -> [t; 0.0]
-    prob = KetODEProblem(sys, u, ψ0, 1.0)
+    rollout = KetODEProblem(sys, u, ψ0, 1.0)
 
     # test default
-    sol1 = solve(prob)
+    sol1 = solve(rollout)
     @test sol1[:u] ≈ u.(sol1.t)
 
     # test solve kwargs
-    sol2 = solve(prob, dense=false, save_everystep=false, save_start=false, save_end=true)
+    sol2 = solve(rollout, dense=false, save_everystep=false, save_start=false, save_end=true)
     @test length(sol2[:ψ]) == 1
     @test length(sol2[:ψ][1]) == length(ψ0)
 
     # rename 
-    prob = KetODEProblem(sys, u, ψ0, 1.0, state_name=:x)
-    sol = solve(prob)
+    rollout = KetODEProblem(sys, u, ψ0, 1.0, state_name=:x)
+    sol = solve(rollout)
     @test sol[:x] ≈ sol.u
 end
 
@@ -223,21 +259,21 @@ end
     
     sys = QuantumSystem([PAULIS.X, PAULIS.Y], 1.0, [1.0, 1.0])
     u = t -> [t; 0.0]
-    prob = UnitaryODEProblem(sys, u, 1.0)
+    rollout = UnitaryODEProblem(sys, u, 1.0)
 
     # test default
-    sol1 = solve(prob)
+    sol1 = solve(rollout)
     @test sol1[:U] ≈ sol1.u
     @test sol1[:u] ≈ u.(sol1.t)
 
     # test solve kwargs
-    sol2 = solve(prob, dense=false, save_everystep=false, save_start=false, save_end=true)
+    sol2 = solve(rollout, dense=false, save_everystep=false, save_start=false, save_end=true)
     @test length(sol2[:U]) == 1
     @test size(sol2[:U][1]) == (sys.levels, sys.levels)
     
     # rename 
-    prob = UnitaryODEProblem(sys, u, 1.0, state_name=:X)
-    sol = solve(prob)
+    rollout = UnitaryODEProblem(sys, u, 1.0, state_name=:X)
+    sol = solve(rollout)
     @test sol[:X] ≈ sol.u
 end
 
