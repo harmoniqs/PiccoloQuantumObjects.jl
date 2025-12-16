@@ -277,4 +277,62 @@ end
     @test sol[:X] ≈ sol.u
 end
 
+@testitem "Test density rollout symbolic interface" begin
+    using OrdinaryDiffEq: solve
+
+    csys = QuantumSystem([PAULIS.X, PAULIS.Y], 1.0, [1.0, 1.0])
+    a = ComplexF64[0 1; 0 0]
+    sys = OpenQuantumSystem(csys, dissipation_operators=[1e-3 * a])
+    u = t -> [t; 0.0]
+
+    ψ0 = ComplexF64[1, 0]
+    ρ0 = ψ0 * ψ0'
+    rollout = DensityODEProblem(sys, u, ρ0, 1.0)
+
+    # test default symbolic access
+    sol1 = solve(rollout)
+    @test sol1[:ρ] ≈ sol1.u
+    @test sol1[:u] ≈ u.(sol1.t)
+
+    # test solve kwargs
+    sol2 = solve(rollout, dense=false, save_everystep=false, save_start=false, save_end=true)
+    @test length(sol2[:ρ]) == 1
+    @test size(sol2[:ρ][1]) == (sys.levels, sys.levels)
+
+    # rename
+    rollout = DensityODEProblem(sys, u, ρ0, 1.0, state_name=:X)
+    sol = solve(rollout)
+    @test sol[:X] ≈ sol.u
+end
+
+@testitem "Rollout internal consistency (ket/unitary/density, closed system)" begin
+    using OrdinaryDiffEq: solve
+
+    sys  = QuantumSystem([PAULIS.X, PAULIS.Y], 1.0, [1.0, 1.0])
+    osys = OpenQuantumSystem(sys)
+
+    u = t -> [t; 0.0]
+    T = 1.0
+    ψ0 = ComplexF64[1, 0]
+    ρ0 = ψ0 * ψ0'
+
+    ket_prob = KetODEProblem(sys,  u, ψ0, T)
+    U_prob = UnitaryODEProblem(sys, u, T)
+    rho_prob = DensityODEProblem(osys, u, ρ0, T)
+
+    # Save only final state so comparisons are well-defined
+    kw = (dense=false, save_everystep=false, save_start=false, save_end=true)
+    ket_sol = solve(ket_prob; kw...)
+    U_sol = solve(U_prob; kw...)
+    ρ_sol = solve(rho_prob; kw...)
+
+    ψT = ket_sol.u[end]
+    UT = U_sol.u[end]
+    ρT = ρ_sol.u[end]
+
+    @test ψT ≈ UT * ψ0
+    @test ρT ≈ ψT * ψT' atol=1e-5
+    @test ρT ≈ UT * ρ0 * UT' atol=1e-5
+end
+
 end
