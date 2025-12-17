@@ -5,7 +5,6 @@ export QuantumSystem
 export OpenQuantumSystem
 export VariationalQuantumSystem
 export CompositeQuantumSystem
-export lift_operator
 
 export get_drift
 export get_drives
@@ -13,6 +12,7 @@ export get_c_ops
 
 using ..Isomorphisms
 using ..QuantumObjectUtils
+using ..LiftedOperators
 
 using LinearAlgebra
 using SparseArrays
