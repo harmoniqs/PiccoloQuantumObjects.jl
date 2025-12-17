@@ -55,37 +55,30 @@ function _index(name::Symbol, n1::Int, n2::Int)
     return idx
 end
 
-struct PiccoloRolloutSystem{T1 <: SymbolIndex, T2 <: SymbolIndex}
+struct PiccoloRolloutSystem{T1 <: SymbolIndex}
     state_index::Dict{Symbol, T1}
-    control_index::Dict{Symbol, T2}
-    t::Union{Symbol, Nothing}
+    t::Symbol
     defaults::Dict{Symbol, Float64}
 end
 
 function PiccoloRolloutSystem(
     state::Pair{Symbol, Int}, 
-    control::Pair{Symbol, Int};
     timestep_name::Symbol=:t,
     defaults::Dict{Symbol,Float64}=Dict{Symbol,Float64}()
 )
     state_name, n_state = state
-    control_name, n_control = control
     state_index = _index(state_name, n_state)
-    control_index = _index(control_name, n_control)
-    return PiccoloRolloutSystem(state_index, control_index, timestep_name, defaults)
+    return PiccoloRolloutSystem(state_index, timestep_name, defaults)
 end
 
 function PiccoloRolloutSystem(
     state::Pair{Symbol, Tuple{Int, Int}}, 
-    control::Pair{Symbol, Int};
     timestep_name::Symbol=:t,
     defaults::Dict{Symbol,Float64}=Dict{Symbol,Float64}()
 )
     state_name, (n1, n2) = state
-    control_name, n_control = control
     state_index = _index(state_name, n1, n2)
-    control_index = _index(control_name, n_control)
-    return PiccoloRolloutSystem(state_index, control_index, timestep_name, defaults)
+    return PiccoloRolloutSystem(state_index, timestep_name, defaults)
 end
 
 function _construct_operator(sys::AbstractQuantumSystem, u::F) where F
@@ -109,7 +102,7 @@ end
 function _construct_rhs(sys::OpenQuantumSystem, u::F) where F
     Ls = sys.dissipation_operators
     Ks = map(L -> adjoint(L) * L, Ls)  # precompute L†L once
-    tmp = similar(ρ0)  # buffer
+    tmp = similar(Matrix{ComplexF64}, (sys.levels, sys.levels))  # buffer
 
     rhs!(dρ, ρ, p, t) = begin
         Ht = sys.H(u(t), t)
@@ -136,20 +129,31 @@ end
 # ------------------------------------------
 # Standard, sparse ODE integrators
 # ------------------------------------------
+# TODO: document solve kwarg defaults
 
 function KetODEProblem(
-    sys::AbstractQuantumSystem, u::F, ψ0::Vector{ComplexF64}, T::Real; 
+    sys::AbstractQuantumSystem, 
+    u::F, 
+    ψ0::Vector{ComplexF64}, 
+    times::AbstractVector{<:Real}; 
     state_name::Symbol=:ψ,
     control_name::Symbol=:u,
     kwargs...
 ) where F
 	rhs! = _construct_rhs(sys, u)
-    sii_sys = PiccoloRolloutSystem(state_name => sys.levels, control_name => sys.n_drives)
-	return ODEProblem(ODEFunction(rhs!; sys = sii_sys), ψ0, (0, T); kwargs...)
+    sii_sys = PiccoloRolloutSystem(state_name => sys.levels)
+	return ODEProblem(
+        ODEFunction(rhs!; sys = sii_sys), ψ0, (0, times[end]); 
+        tstops=times, 
+        saveat=times,
+        kwargs...
+    )
 end
 
 function UnitaryODEProblem(
-    sys::AbstractQuantumSystem, u::F, T::Real; 
+    sys::AbstractQuantumSystem, 
+    u::F, 
+    times::AbstractVector{<:Real}; 
     state_name::Symbol=:U, 
     control_name::Symbol=:u,
     kwargs...
@@ -157,20 +161,33 @@ function UnitaryODEProblem(
     n = sys.levels
 	rhs! = _construct_rhs(sys, u)
     U0 = Matrix{ComplexF64}(I, n, n)
-    sii_sys = PiccoloRolloutSystem(state_name => (n, n), control_name => sys.n_drives)
-	return ODEProblem(ODEFunction(rhs!; sys = sii_sys), U0, (0, T); kwargs...)
+    sii_sys = PiccoloRolloutSystem(state_name => (n, n))
+	return ODEProblem(
+        ODEFunction(rhs!; sys = sii_sys), U0, (0, times[end]);
+        tstops=times, 
+        saveat=times,
+        kwargs...
+    )
 end
 
 function DensityODEProblem(
-    sys::OpenQuantumSystem, u::F, ρ0::Matrix{ComplexF64}, T::Real; 
+    sys::OpenQuantumSystem, 
+    u::F, 
+    ρ0::Matrix{ComplexF64}, 
+    times::AbstractVector{<:Real}; 
     state_name::Symbol=:ρ,
     control_name::Symbol=:u,
     kwargs...
 ) where F
     n = sys.levels
 	rhs! = _construct_rhs(sys, u)
-    sii_sys = PiccoloRolloutSystem(state_name => (n, n), control_name => sys.n_drives)
-	return ODEProblem(ODEFunction(rhs!; sys = sii_sys), ρ0, (0, T); kwargs...)
+    sii_sys = PiccoloRolloutSystem(state_name => (n, n))
+	return ODEProblem(
+        ODEFunction(rhs!; sys = sii_sys), ρ0, (0, times[end]);
+        tstops=times, 
+        saveat=times,
+        kwargs...
+    )
 end
 
 # ------------------------------------------
@@ -188,7 +205,7 @@ function KetOperatorODEProblem(
     kwargs...
 ) where F
     op! = _construct_operator(sys, u)
-    sii_sys = PiccoloRolloutSystem(state_name => sys.levels, control_name => sys.n_drives)
+    sii_sys = PiccoloRolloutSystem(state_name => sys.levels)
 	return ODEProblem(
         ODEFunction(op!; sys = sii_sys), 
         ψ0, 
@@ -210,7 +227,7 @@ function UnitaryOperatorODEProblem(
     n = sys.levels
     op! = _construct_operator(sys, u)
     U0 = Matrix{ComplexF64}(I, n, n)
-    sii_sys = PiccoloRolloutSystem(state_name => (n, n), control_name => sys.n_drives)
+    sii_sys = PiccoloRolloutSystem(state_name => (n, n))
 	return ODEProblem(
         ODEFunction(op!; sys = sii_sys), 
         U0,
@@ -227,18 +244,14 @@ end
 # ------------------------------------------------------------ #
 
 _name(sym::Symbol) = sym   
-_name(sym) = nothing
-
-# ------------------------------------------
-# States (and parameters)
-# ------------------------------------------
+_name(::Any) = nothing
 
 SII.constant_structure(::PiccoloRolloutSystem) = true
 SII.default_values(sys::PiccoloRolloutSystem) = sys.defaults
 
-SII.is_time_dependent(sys::PiccoloRolloutSystem) = sys.t !== nothing
-SII.is_independent_variable(sys::PiccoloRolloutSystem, sym) = sys.t !== nothing && _name(sym) === sys.t
-SII.independent_variable_symbols(sys::PiccoloRolloutSystem) = sys.t === nothing ? Symbol[] : [sys.t]
+SII.is_time_dependent(sys::PiccoloRolloutSystem) = true
+SII.is_independent_variable(sys::PiccoloRolloutSystem, sym) = _name(sym) === sys.t
+SII.independent_variable_symbols(sys::PiccoloRolloutSystem) = [sys.t]
 
 # solved variables (state)
 SII.is_variable(sys::PiccoloRolloutSystem, sym) = haskey(sys.state_index, _name(sym))
@@ -257,44 +270,48 @@ SII.is_observed(sys::PiccoloRolloutSystem, sym) = false
 @testitem "Test ket rollout symbolic interface" begin
     using OrdinaryDiffEq: solve
     
-    sys = QuantumSystem([PAULIS.X, PAULIS.Y], 1.0, [1.0, 1.0])
+    T, Δt = 1.0, 0.1
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
     ψ0 = ComplexF64[1, 0]
     u = t -> [t; 0.0]
-    rollout = KetODEProblem(sys, u, ψ0, 1.0)
+    times = 0:Δt:T
+    rollout = KetODEProblem(sys, u, ψ0, times)
 
     # test default
     sol1 = solve(rollout)
     @test sol1[:ψ] ≈ sol1.u
 
     # test solve kwargs
-    sol2 = solve(rollout, dense=false, save_everystep=false, save_start=false, save_end=true)
+    sol2 = solve(rollout, saveat=[times[end]])
     @test length(sol2[:ψ]) == 1
     @test length(sol2[:ψ][1]) == length(ψ0)
 
     # rename 
-    rollout = KetODEProblem(sys, u, ψ0, 1.0, state_name=:x)
+    rollout = KetODEProblem(sys, u, ψ0, times, state_name=:x)
     sol = solve(rollout)
     @test sol[:x] ≈ sol.u
 end
 
 @testitem "Test unitary rollout symbolic interface" begin
     using OrdinaryDiffEq: solve
-    
-    sys = QuantumSystem([PAULIS.X, PAULIS.Y], 1.0, [1.0, 1.0])
+
+    T, Δt = 1.0, 0.1
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
     u = t -> [t; 0.0]
-    rollout = UnitaryODEProblem(sys, u, 1.0)
+    times = 0:Δt:T
+    rollout = UnitaryODEProblem(sys, u, times)
 
     # test default
     sol1 = solve(rollout)
     @test sol1[:U] ≈ sol1.u
 
     # test solve kwargs
-    sol2 = solve(rollout, dense=false, save_everystep=false, save_start=false, save_end=true)
+    sol2 = solve(rollout, saveat=[times[end]])
     @test length(sol2[:U]) == 1
     @test size(sol2[:U][1]) == (sys.levels, sys.levels)
     
     # rename 
-    rollout = UnitaryODEProblem(sys, u, 1.0, state_name=:X)
+    rollout = UnitaryODEProblem(sys, u, times, state_name=:X)
     sol = solve(rollout)
     @test sol[:X] ≈ sol.u
 end
@@ -302,44 +319,46 @@ end
 @testitem "Test density rollout symbolic interface" begin
     using OrdinaryDiffEq: solve
 
-    csys = QuantumSystem([PAULIS.X, PAULIS.Y], 1.0, [1.0, 1.0])
+    T, Δt = 1.0, 0.1
+    csys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
     a = ComplexF64[0 1; 0 0]
     sys = OpenQuantumSystem(csys, dissipation_operators=[1e-3 * a])
     u = t -> [t; 0.0]
+    times = 0:Δt:T
 
     ψ0 = ComplexF64[1, 0]
     ρ0 = ψ0 * ψ0'
-    rollout = DensityODEProblem(sys, u, ρ0, 1.0)
+    rollout = DensityODEProblem(sys, u, ρ0, times)
 
     # test default symbolic access
     sol1 = solve(rollout)
     @test sol1[:ρ] ≈ sol1.u
 
     # test solve kwargs
-    sol2 = solve(rollout, dense=false, save_everystep=false, save_start=false, save_end=true)
+    sol2 = solve(rollout, saveat=[times[end]])
     @test length(sol2[:ρ]) == 1
     @test size(sol2[:ρ][1]) == (sys.levels, sys.levels)
 
     # rename
-    rollout = DensityODEProblem(sys, u, ρ0, 1.0, state_name=:X)
+    rollout = DensityODEProblem(sys, u, ρ0, times, state_name=:X)
     sol = solve(rollout)
     @test sol[:X] ≈ sol.u
 end
 
 @testitem "Rollout internal consistency (ket/unitary/density, closed system)" begin
     using OrdinaryDiffEq: solve
-
-    sys  = QuantumSystem([PAULIS.X, PAULIS.Y], 1.0, [1.0, 1.0])
+    T, Δt = 1.0, 0.1
+    sys  = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
     osys = OpenQuantumSystem(sys)
 
     u = t -> [t; 0.0]
-    T = 1.0
+    times = 0:Δt:T
     ψ0 = ComplexF64[1, 0]
     ρ0 = ψ0 * ψ0'
 
-    ket_prob = KetODEProblem(sys,  u, ψ0, T)
-    U_prob = UnitaryODEProblem(sys, u, T)
-    rho_prob = DensityODEProblem(osys, u, ρ0, T)
+    ket_prob = KetODEProblem(sys,  u, ψ0, times)
+    U_prob = UnitaryODEProblem(sys, u, times)
+    rho_prob = DensityODEProblem(osys, u, ρ0, times)
 
     # Save only final state so comparisons are well-defined
     kw = (dense=false, save_everystep=false, save_start=false, save_end=true)
