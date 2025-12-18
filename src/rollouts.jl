@@ -8,7 +8,19 @@ Provides a domain specific language for quantum system rollouts, with functions
 - UnitaryODEProblem: Unitary rollouts
 - DensityODEProblem: Density matrix rollouts (open systems)
 
+Includes SciML MatrixOperator versions for linear matrix ODEs (e.g., Magnus expansion),
+- KetOperatorODEProblem
+- UnitaryOperatorODEProblem
+
+Methods for quick fidelity of zero-order hold controls are available via
+- rollout_fidelity
+
 """
+
+export fidelity
+export unitary_fidelity
+export rollout_fidelity
+export unitary_rollout_fidelity
 
 export KetODEProblem
 export KetOperatorODEProblem
@@ -17,13 +29,57 @@ export UnitaryOperatorODEProblem
 export DensityODEProblem
 
 using LinearAlgebra
+using NamedTrajectories
+using DataInterpolations
+using OrdinaryDiffEq: MagnusGL4
 using SciMLBase
 using SymbolicIndexingInterface
 const SII = SymbolicIndexingInterface
 using TestItems
 
+using ..Isomorphisms
 using ..QuantumSystems
 
+# ------------------------------------------------------------ #
+# Fidelity
+# ------------------------------------------------------------ #
+
+"""
+    fidelity(ψ::AbstractVector{<:Number}, ψ_goal::AbstractVector{<:Number})
+
+Calculate the fidelity between two quantum states `ψ` and `ψ_goal`.
+"""
+function fidelity(
+    ψ::AbstractVector{<:Number}, 
+    ψ_goal::AbstractVector{<:Number}
+)
+    return abs2(ψ'ψ_goal)
+end
+
+"""
+    fidelity(ρ::AbstractMatrix{<:Number}, ρ_goal::AbstractMatrix{<:Number})
+
+Calculate the fidelity between two density matrices `ρ` and `ρ_goal`.
+"""
+function fidelity(ρ::AbstractMatrix{<:Number}, ρ_goal::AbstractMatrix{<:Number})
+    return real(tr(ρ * ρ_goal))
+end
+
+"""
+    unitary_fidelity(U::AbstractMatrix{<:Number}, U_goal::AbstractMatrix{<:Number})
+
+Calculate the fidelity between unitary operators `U` and `U_goal` in the `subspace`.
+"""
+function unitary_fidelity(
+    U::AbstractMatrix{<:Number},
+    U_goal::AbstractMatrix{<:Number};
+    subspace::AbstractVector{Int}=axes(U, 1)
+)
+    U = U[subspace, subspace]
+    U_goal = U_goal[subspace, subspace]
+    N = size(U, 1)
+    return abs2(tr(U' * U_goal)) / N^2
+end
 
 # ------------------------------------------------------------ #
 # DSL for Piccolo
@@ -130,6 +186,7 @@ end
 # Standard, sparse ODE integrators
 # ------------------------------------------
 # TODO: document solve kwarg defaults
+# TODO: states must be vector (not sparse), but could infer eltype (NT eltype?)
 
 function KetODEProblem(
     sys::AbstractQuantumSystem, 
@@ -153,15 +210,14 @@ end
 function UnitaryODEProblem(
     sys::AbstractQuantumSystem, 
     u::F, 
-    times::AbstractVector{<:Real}; 
+    times::AbstractVector{<:Real};
+    U0::Matrix{ComplexF64}=Matrix{ComplexF64}(I, sys.levels, sys.levels),
     state_name::Symbol=:U, 
     control_name::Symbol=:u,
     kwargs...
 ) where F
-    n = sys.levels
 	rhs! = _construct_rhs(sys, u)
-    U0 = Matrix{ComplexF64}(I, n, n)
-    sii_sys = PiccoloRolloutSystem(state_name => (n, n))
+    sii_sys = PiccoloRolloutSystem(state_name => (sys.levels, sys.levels))
 	return ODEProblem(
         ODEFunction(rhs!; sys = sii_sys), U0, (0, times[end]);
         tstops=times, 
@@ -220,14 +276,13 @@ function UnitaryOperatorODEProblem(
     sys::AbstractQuantumSystem, 
     u::F, 
     times::AbstractVector{<:Real}; 
+    U0::Matrix{ComplexF64}=Matrix{ComplexF64}(I, sys.levels, sys.levels),
     state_name::Symbol=:U, 
     control_name::Symbol=:u,
     kwargs...
 ) where F
-    n = sys.levels
     op! = _construct_operator(sys, u)
-    U0 = Matrix{ComplexF64}(I, n, n)
-    sii_sys = PiccoloRolloutSystem(state_name => (n, n))
+    sii_sys = PiccoloRolloutSystem(state_name => (sys.levels, sys.levels))
 	return ODEProblem(
         ODEFunction(op!; sys = sii_sys), 
         U0,
@@ -236,6 +291,64 @@ function UnitaryOperatorODEProblem(
         saveat=times,
         kwargs...
     )
+end
+
+# ------------------------------------------------------------ #
+# Rollout fidelity methods
+# ------------------------------------------------------------ #
+# TODO: These can be extension methods for OrdinaryDiffEq
+# TODO: Adapt these methods to use quantum trajectories (only _one_ rollout_fidelity method (remove unitary_rollout_fidelity), have ensemble trajectory for EnsembleProblem, etc.)
+
+function rollout_fidelity(
+    traj::NamedTrajectory, 
+    sys::AbstractQuantumSystem;
+    state_name::Symbol=:ψ̃,
+    control_name::Symbol=:u,
+    algorithm=MagnusGL4(),
+)
+    state_names = [n for n ∈ traj.names if startswith(string(n), string(state_name))]
+    isempty(state_names) && error("Trajectory does not contain $(state_name).")
+
+    # ZOH controls
+    u = ConstantInterpolation(traj, control_name)
+    times = get_times(traj)
+
+    # Blank initial state
+    tmp0 = zeros(ComplexF64, sys.levels)
+    rollout = KetOperatorODEProblem(sys, u, tmp0, times, state_name=state_name)
+
+    # Ensemble over initial states
+    prob_func(prob, i, repeat) = remake(prob, u0=iso_to_ket(traj.initial[state_names[i]]))
+    ensemble_prob = EnsembleProblem(rollout, prob_func=prob_func)
+    ensemble_sol = solve(ensemble_prob, algorithm, trajectories=length(state_names), saveat=[times[end]])
+    
+    fids = map(zip(ensemble_sol, state_names)) do (sol, name)
+        xf = sol[state_name][end]
+        xg = iso_to_ket(traj.goal[name])
+        fidelity(xf, xg)
+    end
+    return length(fids) == 1 ? fids[1] : fids
+end
+
+function unitary_rollout_fidelity(
+    traj::NamedTrajectory, 
+    sys::AbstractQuantumSystem;
+    state_name::Symbol=:Ũ⃗,
+    control_name::Symbol=:u,
+    algorithm=MagnusGL4(),
+)
+    state_name ∉ traj.names && error("Trajectory does not contain $(state_name).")
+
+    # ZOH controls
+    u = ConstantInterpolation(traj, control_name)
+    times = get_times(traj)
+
+    x0 = iso_vec_to_operator(traj.initial[state_name])
+    rollout = UnitaryOperatorODEProblem(sys, u, times, U0=x0, state_name=state_name)
+    sol = solve(rollout, algorithm, saveat=[times[end]])
+    xf = sol[state_name][end]
+    xg = iso_vec_to_operator(traj.goal[state_name])
+    return unitary_fidelity(xf, xg)
 end
 
 # ------------------------------------------------------------ #
@@ -266,6 +379,7 @@ SII.parameter_symbols(::PiccoloRolloutSystem) = Symbol[]
 SII.is_observed(sys::PiccoloRolloutSystem, sym) = false
 
 # *************************************************************************** #
+# TODO: Test rollout fidelity (after adpating to new interface)
 
 @testitem "Test ket rollout symbolic interface" begin
     using OrdinaryDiffEq: solve
