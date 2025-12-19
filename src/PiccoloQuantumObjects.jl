@@ -26,4 +26,10 @@ include("direct_sums.jl")
 include("rollouts.jl")
 @reexport using .Rollouts
 
+include("quantum_trajectories.jl")
+@reexport using .QuantumTrajectories
+
+include("quantum_system_templates/_quantum_system_templates.jl")
+@reexport using .QuantumSystemTemplates
+
 end

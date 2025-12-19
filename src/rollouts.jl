@@ -31,6 +31,8 @@ using LinearAlgebra
 using ProgressMeter
 using TestItems
 
+# TODO: rewrite all of these with OrdinaryDiffEq.jl
+
 
 """
     fidelity(ψ::AbstractVector{<:Number}, ψ_goal::AbstractVector{<:Number})
