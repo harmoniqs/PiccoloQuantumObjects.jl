@@ -31,7 +31,7 @@ export DensityODEProblem
 using LinearAlgebra
 using NamedTrajectories
 using DataInterpolations
-using OrdinaryDiffEq: MagnusGL4
+using OrdinaryDiffEqLinear: MagnusGL4
 using SciMLBase
 using SymbolicIndexingInterface
 const SII = SymbolicIndexingInterface
@@ -382,7 +382,7 @@ SII.is_observed(sys::PiccoloRolloutSystem, sym) = false
 # TODO: Test rollout fidelity (after adpating to new interface)
 
 @testitem "Test ket rollout symbolic interface" begin
-    using OrdinaryDiffEq: solve
+    using SciMLBase: solve # TODO: OrdinaryDiffEqTsit5?
     
     T, Δt = 1.0, 0.1
     sys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
@@ -407,7 +407,7 @@ SII.is_observed(sys::PiccoloRolloutSystem, sym) = false
 end
 
 @testitem "Test unitary rollout symbolic interface" begin
-    using OrdinaryDiffEq: solve
+    using SciMLBase: solve
 
     T, Δt = 1.0, 0.1
     sys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
@@ -431,7 +431,7 @@ end
 end
 
 @testitem "Test density rollout symbolic interface" begin
-    using OrdinaryDiffEq: solve
+    using SciMLBase: solve
 
     T, Δt = 1.0, 0.1
     csys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
@@ -460,7 +460,7 @@ end
 end
 
 @testitem "Rollout internal consistency (ket/unitary/density, closed system)" begin
-    using OrdinaryDiffEq: solve
+    using SciMLBase: solve
     T, Δt = 1.0, 0.1
     sys  = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
     osys = OpenQuantumSystem(sys)

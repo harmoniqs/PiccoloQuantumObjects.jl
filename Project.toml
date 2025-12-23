@@ -1,7 +1,7 @@
 name = "PiccoloQuantumObjects"
 uuid = "5a402ddf-f93c-42eb-975e-5582dcda653d"
-authors = ["Aaron Trowbridge <aaron.j.trowbridge@gmail.com> and contributors"]
 version = "0.8.1"
+authors = ["Aaron Trowbridge <aaron.j.trowbridge@gmail.com> and contributors"]
 
 [deps]
 DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
@@ -9,7 +9,8 @@ ExponentialAction = "e24c0720-ea99-47e8-929e-571b494574d3"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NamedTrajectories = "538bc3a1-5ab9-4fc3-b776-35ca1e893e08"
-OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
+OrdinaryDiffEqLinear = "521117fe-8c41-49f8-b3b6-30780b3f0fb5"
+OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
@@ -24,7 +25,8 @@ ExponentialAction = "0.2"
 ForwardDiff = "1.2"
 LinearAlgebra = "1.10, 1.11, 1.12"
 NamedTrajectories = "0.7"
-OrdinaryDiffEq = "6"
+OrdinaryDiffEqLinear = "1.8"
+OrdinaryDiffEqTsit5 = "1.7"
 ProgressMeter = "1.11"
 Reexport = "1.2"
 SciMLBase = "2.128"
