@@ -13,6 +13,7 @@ export get_iso_vec_subspace_indices
 
 using ..Gates
 using ..Isomorphisms
+using ..LiftedOperators
 using ..QuantumObjectUtils
 using ..QuantumSystems
 
