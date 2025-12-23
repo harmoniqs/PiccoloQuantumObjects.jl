@@ -12,12 +12,15 @@ export operator_to_iso_vec
 export iso_operator_to_iso_vec
 export iso_operator_to_operator
 export operator_to_iso_operator
+export ket_to_bloch
+export bloch_to_ket
 
 # Do not export Hamiltonian isomorphisms
 
 using LinearAlgebra
 using SparseArrays
 using TestItems
+using ..Gates
 
 
 @doc raw"""
@@ -249,6 +252,51 @@ function var_G(
     return G_0 + G_V
 end
 
+# ----------------------------------------------------------------------------- #
+#                             Bloch Sphere                                      #
+# ----------------------------------------------------------------------------- #
+
+@doc raw"""
+    ket_to_bloch(ψ::AbstractVector{<:Number})
+
+Convert a ket to a Bloch vector representation.
+"""
+function ket_to_bloch(ψ::AbstractVector{<:Number})
+    @assert length(ψ) == 2
+    ρ = ψ * ψ'
+    bloch_vector =  [real(tr(ρ * P)) for P in [PAULIS.X, PAULIS.Y, PAULIS.Z]]
+
+    return bloch_vector / norm(bloch_vector)
+end
+
+@doc raw"""
+    bloch_to_ket(v::AbstractVector{<:Real}; digits=6)
+
+
+Convert a Bloch vector to a ket (up to global phase).
+"""
+function bloch_to_ket(bloch::AbstractVector{R}; digits::Integer=6) where R <: Real
+    @assert length(bloch) == 3 
+    x, y, z = bloch
+    
+    θ = acos(z)
+    φ = atan(y, x)
+
+    return Complex{R}[cos(θ/2), exp(im * φ) * sin(θ/2)]
+
+end
+
+function density_to_bloch(ψ::AbstractVector{<:Number})
+    @assert length(ψ) == 2
+    ρ = ψ * ψ'
+    return [real(tr(ρ * P)) for P in [PAULIS.X, PAULIS.Y, PAULIS.Z]]
+end
+
+function bloch_to_density(v::AbstractVector{<:Real}) 
+    @assert length(v) == 3
+    return 0.5 * (I(2) + v[1]*PAULIS.X + v[2]*PAULIS.Y + v[3]*PAULIS.Z)
+end
+
 # *************************************************************************** #
 
 @testitem "Test ket isomorphisms" begin
@@ -352,6 +400,22 @@ end
                     1.0 0.0 3.0 4.0 0.0 0.0;
                     0.0 0.0 0.0 0.0 1.0 2.0; 
                     1.0 1.0 0.0 0.0 3.0 4.0]
+end
+
+@testitem "Test Bloch vector to ket and ket to Bloch vector" begin
+    using LinearAlgebra: dot
+    using PiccoloQuantumObjects: Isomorphisms.ket_to_bloch, Isomorphisms.bloch_to_ket
+
+    ψ₁ = [1.0, 0.0]
+    ψ₂ = [0.0, 1.0]
+    ψ₃ = [1 / √2, 1 / √2]
+    ψ₄ = [1 / √2, -1im / √2]
+
+    for ψ in (ψ₁, ψ₂, ψ₃, ψ₄)
+        bloch = ket_to_bloch(ψ)
+        ψ′ = bloch_to_ket(bloch)
+        @test abs2(dot(ψ′, ψ)) ≈ 1.0 atol=1e-10
+    end
 end
 
 end

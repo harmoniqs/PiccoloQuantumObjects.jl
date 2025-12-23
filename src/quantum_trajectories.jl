@@ -162,6 +162,28 @@ function unitary_geodesic(
     return unitary_geodesic(U_init, U_goal, range(0, 1, samples); kwargs...)
 end
 
+"""
+    get_initial_controls(sys::AbstractQuantumSystem, N::Int)
+
+Generate initial controls sampled uniformly between drive bounds, with zeros at boundaries.
+
+# Arguments
+- `sys::AbstractQuantumSystem`: The quantum system with drive_bounds
+- `N::Int`: Number of timesteps in the trajectory
+
+# Returns
+- `Matrix{Float64}`: Control matrix of size `(n_drives, N)` with zeros at first and last timesteps
+"""
+function get_initial_controls(sys::AbstractQuantumSystem, N::Int)
+    n_drives = sys.n_drives
+    u_lower = [sys.drive_bounds[i][1] for i in 1:n_drives]
+    u_upper = [sys.drive_bounds[i][2] for i in 1:n_drives]
+    u_inner = u_lower .+ (u_upper .- u_lower) .* rand(n_drives, N - 2)
+    return hcat(zeros(n_drives), u_inner, zeros(n_drives))
+end
+
+export get_initial_controls
+
 # ============================================================================= #
 #                        Quantum Trajectory Types                               #
 # ============================================================================= #
@@ -266,14 +288,8 @@ struct UnitaryTrajectory <: AbstractQuantumTrajectory
             Ũ⃗ = unitary_linear_interpolation(U_init, U_goal, N)
         end
 
-        u_maxs = [sys.drive_bounds[i][2] for i in 1:n_drives]
-        
-        # Initialize controls (zero at boundaries)
-        u = hcat(
-            zeros(n_drives),
-            mapslices(u_ -> u_ .* u_maxs, 2rand(n_drives, N - 2) .- 1, dims=1),
-            zeros(n_drives)
-        )
+        # Initialize controls
+        u = get_initial_controls(sys, N)
         
         # Timesteps
         Δt_vec = fill(Δt, N)
@@ -373,12 +389,8 @@ struct KetTrajectory <: AbstractQuantumTrajectory
         # Linear interpolation of state
         ψ̃ = linear_interpolation(ψ̃_init, ψ̃_goal, N)
         
-        # Initialize controls (zero at boundaries)
-        u = hcat(
-            zeros(n_drives),
-            randn(n_drives, N - 2) * 0.01,
-            zeros(n_drives)
-        )
+        # Initialize controls
+        u = get_initial_controls(sys, N)
         
         # Timesteps
         Δt_vec = fill(Δt, N)
@@ -471,12 +483,8 @@ struct DensityTrajectory <: AbstractQuantumTrajectory
         # Linear interpolation of state
         ρ⃗̃ = linear_interpolation(ρ⃗̃_init, ρ⃗̃_goal, N)
         
-        # Initialize controls (zero at boundaries)
-        u = hcat(
-            zeros(n_drives),
-            randn(n_drives, N - 2) * 0.01,
-            zeros(n_drives)
-        )
+        # Initialize controls
+        u = get_initial_controls(sys, N)
         
         # Timesteps
         Δt_vec = fill(Δt, N)
