@@ -221,6 +221,67 @@ function QuantumSystem(H_drift::AbstractMatrix{ℂ}, T_max::Float64; time_depend
     QuantumSystem(H_drift, Matrix{ℂ}[], T_max, Float64[]; time_dependent=time_dependent)
 end
 
+# ----------------------------------------------------------------------------- #
+# Constructors without T_max (duration lives in Pulse, not System)
+# ----------------------------------------------------------------------------- #
+
+"""
+    QuantumSystem(H_drift, H_drives, drive_bounds; time_dependent=false)
+
+Construct a QuantumSystem without specifying T_max. Duration is specified by the Pulse.
+
+# Arguments
+- `H_drift::AbstractMatrix`: The drift (time-independent) Hamiltonian
+- `H_drives::Vector{<:AbstractMatrix}`: Vector of drive Hamiltonians
+- `drive_bounds::DriveBounds`: Drive amplitude bounds for each control
+
+# Example
+```julia
+sys = QuantumSystem(PAULIS[:Z], [PAULIS[:X], PAULIS[:Y]], [1.0, 1.0])
+```
+"""
+function QuantumSystem(
+    H_drift::AbstractMatrix{<:Number},
+    H_drives::Vector{<:AbstractMatrix{<:Number}},
+    drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
+    time_dependent::Bool=false
+)
+    return QuantumSystem(H_drift, H_drives, NaN, drive_bounds; time_dependent=time_dependent)
+end
+
+"""
+    QuantumSystem(H_drives, drive_bounds; time_dependent=false)
+
+Construct a QuantumSystem with no drift and no T_max.
+
+# Example
+```julia
+sys = QuantumSystem([PAULIS[:X], PAULIS[:Y]], [1.0, 1.0])
+```
+"""
+function QuantumSystem(
+    H_drives::Vector{<:AbstractMatrix{ℂ}}, 
+    drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}; 
+    time_dependent::Bool=false
+) where ℂ <: Number
+    @assert !isempty(H_drives) "At least one drive is required"
+    return QuantumSystem(spzeros(ℂ, size(H_drives[1])), H_drives, NaN, drive_bounds; time_dependent=time_dependent)
+end
+
+"""
+    QuantumSystem(H_drift; time_dependent=false)
+
+Construct a QuantumSystem with only drift (no drives, no T_max).
+
+# Example
+```julia
+sys = QuantumSystem(PAULIS[:Z])
+```
+"""
+function QuantumSystem(H_drift::AbstractMatrix{ℂ}; time_dependent::Bool=false) where ℂ <: Number
+    return QuantumSystem(H_drift, Matrix{ℂ}[], NaN, Float64[]; time_dependent=time_dependent)
+end
+
 # ******************************************************************************* #
 
 @testitem "System creation" begin
@@ -341,3 +402,33 @@ end
     @test sys2 isa QuantumSystem
 end
 
+@testitem "System creation without T_max" begin
+    using PiccoloQuantumObjects: PAULIS, QuantumSystem, get_drift, get_drives
+    
+    # Test with drift, drives, and bounds (no T_max)
+    H_drift = PAULIS.Z
+    H_drives = [PAULIS.X, PAULIS.Y]
+    u_bounds = [1.0, 1.0]
+    
+    sys = QuantumSystem(H_drift, H_drives, u_bounds)
+    @test sys isa QuantumSystem
+    @test get_drift(sys) == H_drift
+    @test get_drives(sys) == H_drives
+    @test isnan(sys.T_max)
+    @test sys.n_drives == 2
+    
+    # Test with drives only (no drift, no T_max)
+    sys2 = QuantumSystem(H_drives, u_bounds)
+    @test sys2 isa QuantumSystem
+    @test get_drift(sys2) == zeros(ComplexF64, 2, 2)
+    @test get_drives(sys2) == H_drives
+    @test isnan(sys2.T_max)
+    
+    # Test with drift only (no drives, no T_max)
+    sys3 = QuantumSystem(H_drift)
+    @test sys3 isa QuantumSystem
+    @test get_drift(sys3) == H_drift
+    @test isempty(get_drives(sys3))
+    @test isnan(sys3.T_max)
+    @test sys3.n_drives == 0
+end

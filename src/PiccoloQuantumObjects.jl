@@ -26,10 +26,13 @@ include("quantum_system_utils.jl")
 include("direct_sums.jl")
 @reexport using .DirectSums
 
+include("pulses.jl")
+@reexport using .Pulses
+
 include("rollouts.jl")
 @reexport using .Rollouts
 
-include("quantum_trajectories/_quantum_trajectories.jl")
+include("quantum_trajectories.jl")
 @reexport using .QuantumTrajectories
 
 include("quantum_system_templates/_quantum_system_templates.jl")

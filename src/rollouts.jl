@@ -19,8 +19,14 @@ Methods for quick fidelity of zero-order hold controls are available via
 
 export fidelity
 export unitary_fidelity
+export rollout
 export rollout_fidelity
+export ket_rollout
+export ket_rollout_fidelity
+export unitary_rollout
 export unitary_rollout_fidelity
+export open_rollout
+export open_rollout_fidelity
 
 export KetODEProblem
 export KetOperatorODEProblem
@@ -305,12 +311,21 @@ function rollout_fidelity(
     state_name::Symbol=:ψ̃,
     control_name::Symbol=:u,
     algorithm=MagnusGL4(),
+    interpolation::Symbol=:linear,  # :constant, :linear, or :cubic
 )
     state_names = [n for n ∈ traj.names if startswith(string(n), string(state_name))]
     isempty(state_names) && error("Trajectory does not contain $(state_name).")
 
-    # ZOH controls
-    u = ConstantInterpolation(traj, control_name)
+    # Select interpolation method for controls
+    if interpolation == :constant
+        u = ConstantInterpolation(traj, control_name)
+    elseif interpolation == :linear
+        u = LinearInterpolation(traj, control_name)
+    elseif interpolation == :cubic
+        u = CubicSplineInterpolation(traj, control_name)
+    else
+        error("Unknown interpolation method: $(interpolation). Use :constant, :linear, or :cubic")
+    end
     times = get_times(traj)
 
     # Blank initial state
@@ -336,11 +351,20 @@ function unitary_rollout_fidelity(
     state_name::Symbol=:Ũ⃗,
     control_name::Symbol=:u,
     algorithm=MagnusGL4(),
+    interpolation::Symbol=:linear,  # :constant, :linear, or :cubic
 )
     state_name ∉ traj.names && error("Trajectory does not contain $(state_name).")
 
-    # ZOH controls
-    u = ConstantInterpolation(traj, control_name)
+    # Select interpolation method for controls
+    if interpolation == :constant
+        u = ConstantInterpolation(traj, control_name)
+    elseif interpolation == :linear
+        u = LinearInterpolation(traj, control_name)
+    elseif interpolation == :cubic
+        u = CubicSplineInterpolation(traj, control_name)
+    else
+        error("Unknown interpolation method: $(interpolation). Use :constant, :linear, or :cubic")
+    end
     times = get_times(traj)
 
     x0 = iso_vec_to_operator(traj.initial[state_name])
@@ -349,6 +373,88 @@ function unitary_rollout_fidelity(
     xf = sol[state_name][end]
     xg = iso_vec_to_operator(traj.goal[state_name])
     return unitary_fidelity(xf, xg)
+end
+
+function unitary_rollout(
+    traj::NamedTrajectory, 
+    sys::AbstractQuantumSystem;
+    state_name::Symbol=:Ũ⃗,
+    control_name::Symbol=:u,
+    algorithm=MagnusGL4(),
+    interpolation::Symbol=:linear,  # :constant, :linear, or :cubic
+)
+    state_name ∉ traj.names && error("Trajectory does not contain $(state_name).")
+
+    # Select interpolation method for controls
+    if interpolation == :constant
+        u = ConstantInterpolation(traj, control_name)
+    elseif interpolation == :linear
+        u = LinearInterpolation(traj, control_name)
+    elseif interpolation == :cubic
+        u = CubicSplineInterpolation(traj, control_name)
+    else
+        error("Unknown interpolation method: $(interpolation). Use :constant, :linear, or :cubic")
+    end
+    times = get_times(traj)
+
+    x0 = iso_vec_to_operator(traj.initial[state_name])
+    prob = UnitaryOperatorODEProblem(sys, u, times, U0=x0, state_name=state_name)
+    sol = solve(prob, algorithm, saveat=times)
+    
+    # Extract and convert to iso-vec trajectory
+    Ũ⃗_traj = hcat([operator_to_iso_vec(sol[state_name][i]) for i in 1:length(times)]...)
+    
+    return Ũ⃗_traj
+end
+
+function ket_rollout_fidelity(
+    traj::NamedTrajectory, 
+    sys::AbstractQuantumSystem;
+    state_name::Symbol=:ψ̃,
+    control_name::Symbol=:u,
+    algorithm=MagnusGL4(),
+    interpolation::Symbol=:linear,  # :constant, :linear, or :cubic
+)
+    return rollout_fidelity(
+        traj, 
+        sys; 
+        state_name=state_name, 
+        control_name=control_name, 
+        algorithm=algorithm, 
+        interpolation=interpolation
+    )
+end
+
+function ket_rollout(
+    traj::NamedTrajectory, 
+    sys::AbstractQuantumSystem;
+    state_name::Symbol=:ψ̃,
+    control_name::Symbol=:u,
+    algorithm=MagnusGL4(),
+    interpolation::Symbol=:linear,  # :constant, :linear, or :cubic
+)
+    state_name ∉ traj.names && error("Trajectory does not contain $(state_name).")
+
+    # Select interpolation method for controls
+    if interpolation == :constant
+        u = ConstantInterpolation(traj, control_name)
+    elseif interpolation == :linear
+        u = LinearInterpolation(traj, control_name)
+    elseif interpolation == :cubic
+        u = CubicSplineInterpolation(traj, control_name)
+    else
+        error("Unknown interpolation method: $(interpolation). Use :constant, :linear, or :cubic")
+    end
+    times = get_times(traj)
+
+    ψ0 = iso_to_ket(traj.initial[state_name])
+    prob = KetOperatorODEProblem(sys, u, ψ0, times, state_name=state_name)
+    sol = solve(prob, algorithm, saveat=times)
+    
+    # Extract and convert to iso-vec trajectory
+    ψ̃_traj = hcat([ket_to_iso(sol[state_name][i]) for i in 1:length(times)]...)
+    
+    return ψ̃_traj
 end
 
 # ------------------------------------------------------------ #
@@ -382,7 +488,8 @@ SII.is_observed(sys::PiccoloRolloutSystem, sym) = false
 # TODO: Test rollout fidelity (after adpating to new interface)
 
 @testitem "Test ket rollout symbolic interface" begin
-    using SciMLBase: solve # TODO: OrdinaryDiffEqTsit5?
+    using SciMLBase: solve
+    using OrdinaryDiffEqTsit5: Tsit5
     
     T, Δt = 1.0, 0.1
     sys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
@@ -392,46 +499,48 @@ SII.is_observed(sys::PiccoloRolloutSystem, sym) = false
     rollout = KetODEProblem(sys, u, ψ0, times)
 
     # test default
-    sol1 = solve(rollout)
+    sol1 = solve(rollout, Tsit5())
     @test sol1[:ψ] ≈ sol1.u
 
     # test solve kwargs
-    sol2 = solve(rollout, saveat=[times[end]])
+    sol2 = solve(rollout, Tsit5(), saveat=[times[end]])
     @test length(sol2[:ψ]) == 1
     @test length(sol2[:ψ][1]) == length(ψ0)
 
     # rename 
     rollout = KetODEProblem(sys, u, ψ0, times, state_name=:x)
-    sol = solve(rollout)
+    sol = solve(rollout, Tsit5())
     @test sol[:x] ≈ sol.u
 end
 
 @testitem "Test unitary rollout symbolic interface" begin
     using SciMLBase: solve
+    using OrdinaryDiffEqLinear: MagnusGL4
 
     T, Δt = 1.0, 0.1
     sys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
     u = t -> [t; 0.0]
     times = 0:Δt:T
-    rollout = UnitaryODEProblem(sys, u, times)
+    rollout = UnitaryOperatorODEProblem(sys, u, times)
 
     # test default
-    sol1 = solve(rollout)
+    sol1 = solve(rollout, MagnusGL4())
     @test sol1[:U] ≈ sol1.u
 
     # test solve kwargs
-    sol2 = solve(rollout, saveat=[times[end]])
+    sol2 = solve(rollout, MagnusGL4(), saveat=[times[end]])
     @test length(sol2[:U]) == 1
     @test size(sol2[:U][1]) == (sys.levels, sys.levels)
     
     # rename 
-    rollout = UnitaryODEProblem(sys, u, times, state_name=:X)
-    sol = solve(rollout)
+    rollout = UnitaryOperatorODEProblem(sys, u, times, state_name=:X)
+    sol = solve(rollout, MagnusGL4())
     @test sol[:X] ≈ sol.u
 end
 
 @testitem "Test density rollout symbolic interface" begin
     using SciMLBase: solve
+    using OrdinaryDiffEqTsit5: Tsit5
 
     T, Δt = 1.0, 0.1
     csys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
@@ -445,22 +554,25 @@ end
     rollout = DensityODEProblem(sys, u, ρ0, times)
 
     # test default symbolic access
-    sol1 = solve(rollout)
+    sol1 = solve(rollout, Tsit5())
     @test sol1[:ρ] ≈ sol1.u
 
     # test solve kwargs
-    sol2 = solve(rollout, saveat=[times[end]])
+    sol2 = solve(rollout, Tsit5(), saveat=[times[end]])
     @test length(sol2[:ρ]) == 1
     @test size(sol2[:ρ][1]) == (sys.levels, sys.levels)
 
     # rename
     rollout = DensityODEProblem(sys, u, ρ0, times, state_name=:X)
-    sol = solve(rollout)
+    sol = solve(rollout, Tsit5())
     @test sol[:X] ≈ sol.u
 end
 
 @testitem "Rollout internal consistency (ket/unitary/density, closed system)" begin
     using SciMLBase: solve
+    using OrdinaryDiffEqTsit5: Tsit5
+    using OrdinaryDiffEqLinear: MagnusGL4
+
     T, Δt = 1.0, 0.1
     sys  = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
     osys = OpenQuantumSystem(sys)
@@ -471,14 +583,14 @@ end
     ρ0 = ψ0 * ψ0'
 
     ket_prob = KetODEProblem(sys,  u, ψ0, times)
-    U_prob = UnitaryODEProblem(sys, u, times)
+    U_prob = UnitaryOperatorODEProblem(sys, u, times)
     rho_prob = DensityODEProblem(osys, u, ρ0, times)
 
     # Save only final state so comparisons are well-defined
     kw = (dense=false, save_everystep=false, save_start=false, save_end=true)
-    ket_sol = solve(ket_prob; kw...)
-    U_sol = solve(U_prob; kw...)
-    ρ_sol = solve(rho_prob; kw...)
+    ket_sol = solve(ket_prob, Tsit5(); kw...)
+    U_sol = solve(U_prob, MagnusGL4(); kw...)
+    ρ_sol = solve(rho_prob, Tsit5(); kw...)
 
     ψT = ket_sol.u[end]
     UT = U_sol.u[end]
@@ -487,6 +599,109 @@ end
     @test ψT ≈ UT * ψ0
     @test ρT ≈ ψT * ψT' atol=1e-5
     @test ρT ≈ UT * ρ0 * UT' atol=1e-5
+end
+
+@testitem "Rollouts with all Pulse types" begin
+    using SciMLBase: solve
+    using OrdinaryDiffEqTsit5: Tsit5
+    using OrdinaryDiffEqLinear: MagnusGL4
+
+    T, Δt = 1.0, 0.1
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
+    osys = OpenQuantumSystem(sys)
+    times = 0:Δt:T
+    n_times = length(times)
+    ψ0 = ComplexF64[1, 0]
+    ρ0 = ψ0 * ψ0'
+
+    # Generate test control values (smooth ramp)
+    controls = [sin(π * t / T) for t in times]
+    control_matrix = [controls zeros(n_times)]'  # 2 drives × T timesteps
+
+    # Test all pulse types
+    pulse_types = [
+        ZeroOrderPulse(control_matrix, times),
+        LinearSplinePulse(control_matrix, times),
+        CubicSplinePulse(control_matrix, times),
+    ]
+
+    for pulse in pulse_types
+        # Verify pulse is callable and returns correct shape
+        @test length(pulse(0.0)) == 2
+        @test pulse(0.0) ≈ [0.0, 0.0]
+        
+        # KetODEProblem
+        ket_prob = KetODEProblem(sys, pulse, ψ0, times)
+        ket_sol = solve(ket_prob, Tsit5())
+        @test length(ket_sol.u) == n_times
+        @test length(ket_sol.u[end]) == 2  # 2-level system
+        
+        # UnitaryOperatorODEProblem (for MagnusGL4)
+        U_prob = UnitaryOperatorODEProblem(sys, pulse, times)
+        U_sol = solve(U_prob, MagnusGL4())
+        @test length(U_sol.u) == n_times
+        @test size(U_sol.u[end]) == (2, 2)
+        
+        # DensityODEProblem
+        rho_prob = DensityODEProblem(osys, pulse, ρ0, times)
+        rho_sol = solve(rho_prob, Tsit5())
+        @test length(rho_sol.u) == n_times
+        @test size(rho_sol.u[end]) == (2, 2)
+        
+        # Check consistency: ψ_final should equal U_final * ψ0
+        # Note: different solvers (Tsit5 vs MagnusGL4) have different accuracy
+        ψT = ket_sol.u[end]
+        UT = U_sol.u[end]
+        @test ψT ≈ UT * ψ0 atol=1e-2
+    end
+end
+
+@testitem "Rollouts with GaussianPulse" begin
+    using SciMLBase: solve
+    using OrdinaryDiffEqTsit5: Tsit5
+    using OrdinaryDiffEqLinear: MagnusGL4
+
+    T = 1.0
+    Δt = 0.1
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
+    times = 0:Δt:T
+    n_times = length(times)
+    ψ0 = ComplexF64[1, 0]
+
+    # Create GaussianPulse with 2 drives
+    # Constructor: GaussianPulse(amplitudes, sigmas, centers, duration)
+    amplitudes = [1.0, 0.5]
+    sigmas = [T/4, T/4]
+    centers = [T/2, T/2]
+    pulse = GaussianPulse(amplitudes, sigmas, centers, T)
+
+    # Verify pulse properties
+    @test duration(pulse) == T
+    @test n_drives(pulse) == 2
+    @test length(pulse(T/2)) == 2
+    
+    # Peak should be at t = center (T/2)
+    @test pulse(T/2)[1] ≈ 1.0 atol=1e-10
+    @test pulse(T/2)[2] ≈ 0.5 atol=1e-10
+    
+    # Should be symmetric around center
+    @test pulse(0.25)[1] ≈ pulse(0.75)[1] atol=1e-10
+
+    # KetODEProblem
+    ket_prob = KetODEProblem(sys, pulse, ψ0, times)
+    ket_sol = solve(ket_prob, Tsit5())
+    @test length(ket_sol.u) == n_times
+
+    # UnitaryOperatorODEProblem
+    U_prob = UnitaryOperatorODEProblem(sys, pulse, times)
+    U_sol = solve(U_prob, MagnusGL4())
+    @test length(U_sol.u) == n_times
+
+    # Check consistency
+    # Note: different solvers (Tsit5 vs MagnusGL4) have different accuracy
+    ψT = ket_sol.u[end]
+    UT = U_sol.u[end]
+    @test ψT ≈ UT * ψ0 atol=1e-2
 end
 
 end

@@ -75,6 +75,7 @@ function RydbergChainSystem(;
     ignore_Y_drive::Bool=false,
     T_max::Float64=10.0,
     drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=ignore_Y_drive ? [1.0, 1.0] : [1.0, 1.0, 1.0],
+    time_dependent::Bool=true
 )
     PAULIS = (
         I = ComplexF64[1 0; 0 1],
@@ -125,7 +126,8 @@ function RydbergChainSystem(;
         H_drift,
         H_drives,
         T_max,
-        drive_bounds
+        drive_bounds;
+        time_dependent=time_dependent
     )
 end
 

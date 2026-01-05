@@ -192,6 +192,56 @@ function OpenQuantumSystem(
     )
 end
 
+# ----------------------------------------------------------------------------- #
+# Constructors without T_max (duration lives in Pulse, not System)
+# ----------------------------------------------------------------------------- #
+
+"""
+    OpenQuantumSystem(H_drift, H_drives, drive_bounds; dissipation_operators=[], time_dependent=false)
+
+Construct an OpenQuantumSystem without specifying T_max. Duration is specified by the Pulse.
+"""
+function OpenQuantumSystem(
+    H_drift::AbstractMatrix{<:Number},
+    H_drives::Vector{<:AbstractMatrix{<:Number}},
+    drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
+    dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[],
+    time_dependent::Bool=false
+)
+    return OpenQuantumSystem(H_drift, H_drives, NaN, drive_bounds;
+                            dissipation_operators=dissipation_operators, time_dependent=time_dependent)
+end
+
+"""
+    OpenQuantumSystem(H_drives, drive_bounds; dissipation_operators=[], time_dependent=false)
+
+Construct an OpenQuantumSystem with no drift and no T_max.
+"""
+function OpenQuantumSystem(
+    H_drives::Vector{<:AbstractMatrix{ℂ}}, 
+    drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}};
+    dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[],
+    time_dependent::Bool=false
+) where ℂ <: Number
+    @assert !isempty(H_drives) "At least one drive is required"
+    return OpenQuantumSystem(spzeros(ℂ, size(H_drives[1])), H_drives, NaN, drive_bounds;
+                            dissipation_operators=dissipation_operators, time_dependent=time_dependent)
+end
+
+"""
+    OpenQuantumSystem(H_drift; dissipation_operators=[], time_dependent=false)
+
+Construct an OpenQuantumSystem with only drift (no drives, no T_max).
+"""
+function OpenQuantumSystem(
+    H_drift::AbstractMatrix{ℂ}; 
+    dissipation_operators::Vector{<:AbstractMatrix{<:Number}}=Matrix{ComplexF64}[],
+    time_dependent::Bool=false
+) where ℂ <: Number
+    return OpenQuantumSystem(H_drift, Matrix{ℂ}[], NaN, Float64[];
+                            dissipation_operators=dissipation_operators, time_dependent=time_dependent)
+end
+
 # ******************************************************************************* #
 
 @testitem "Open system creation" begin
