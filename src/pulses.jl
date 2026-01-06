@@ -12,9 +12,9 @@ Provides interpolated and analytic pulse types:
 All pulses are callable: `pulse(t)` returns the control vector at time `t`.
 """
 
-export AbstractPulse
+export AbstractPulse, AbstractSplinePulse
 export ZeroOrderPulse, LinearSplinePulse, CubicSplinePulse, GaussianPulse
-export duration, n_drives, sample
+export duration, n_drives, sample, drive_name
 
 using DataInterpolations: ConstantInterpolation, LinearInterpolation, CubicHermiteSpline
 using TestItems
@@ -30,6 +30,14 @@ Abstract type for all pulse types. All pulses are callable: `pulse(t)` returns
 the control vector at time `t`.
 """
 abstract type AbstractPulse end
+
+"""
+    AbstractSplinePulse <: AbstractPulse
+
+Abstract type for spline-based pulses (linear and cubic interpolation).
+These pulses use the spline coefficients as optimization variables.
+"""
+abstract type AbstractSplinePulse <: AbstractPulse end
 
 # Make all pulses callable
 (pulse::AbstractPulse)(t::Real) = evaluate(pulse, t)
@@ -47,6 +55,13 @@ duration(pulse::AbstractPulse) = pulse.duration
 Return the number of control drives in the pulse.
 """
 n_drives(pulse::AbstractPulse) = pulse.n_drives
+
+"""
+    drive_name(pulse::AbstractPulse)
+
+Return the name of the drive variable for this pulse.
+"""
+drive_name(pulse::AbstractPulse) = pulse.drive_name
 
 """
     sample(pulse::AbstractPulse, times::AbstractVector)
@@ -81,25 +96,30 @@ the value at the most recent sample point.
 - `controls::I`: ConstantInterpolation from DataInterpolations
 - `duration::Float64`: Total pulse duration
 - `n_drives::Int`: Number of control drives
+- `drive_name::Symbol`: Name of the drive variable (default `:u`)
 """
 struct ZeroOrderPulse{I<:ConstantInterpolation} <: AbstractPulse
     controls::I
     duration::Float64
     n_drives::Int
+    drive_name::Symbol
 end
 
 """
-    ZeroOrderPulse(controls::AbstractMatrix, times::AbstractVector)
+    ZeroOrderPulse(controls::AbstractMatrix, times::AbstractVector; drive_name=:u)
 
 Create a zero-order hold pulse from control samples and times.
 
 # Arguments
 - `controls`: Matrix of size `(n_drives, n_times)` with control values
 - `times`: Vector of sample times (must start at 0)
+
+# Keyword Arguments
+- `drive_name`: Name of the drive variable (default `:u`)
 """
-function ZeroOrderPulse(controls::AbstractMatrix, times::AbstractVector)
+function ZeroOrderPulse(controls::AbstractMatrix, times::AbstractVector; drive_name::Symbol=:u)
     interp = ConstantInterpolation(controls, times)
-    return ZeroOrderPulse(interp, Float64(times[end]), size(controls, 1))
+    return ZeroOrderPulse(interp, Float64(times[end]), size(controls, 1), drive_name)
 end
 
 evaluate(p::ZeroOrderPulse, t) = p.controls(t)
@@ -109,7 +129,7 @@ evaluate(p::ZeroOrderPulse, t) = p.controls(t)
 # ============================================================================ #
 
 """
-    LinearSplinePulse{I<:LinearInterpolation} <: AbstractPulse
+    LinearSplinePulse{I<:LinearInterpolation} <: AbstractSplinePulse
 
 Pulse with linear interpolation between sample points.
 
@@ -117,25 +137,30 @@ Pulse with linear interpolation between sample points.
 - `controls::I`: LinearInterpolation from DataInterpolations
 - `duration::Float64`: Total pulse duration
 - `n_drives::Int`: Number of control drives
+- `drive_name::Symbol`: Name of the drive variable (default `:u`)
 """
-struct LinearSplinePulse{I<:LinearInterpolation} <: AbstractPulse
+struct LinearSplinePulse{I<:LinearInterpolation} <: AbstractSplinePulse
     controls::I
     duration::Float64
     n_drives::Int
+    drive_name::Symbol
 end
 
 """
-    LinearSplinePulse(controls::AbstractMatrix, times::AbstractVector)
+    LinearSplinePulse(controls::AbstractMatrix, times::AbstractVector; drive_name=:u)
 
 Create a linearly interpolated pulse from control samples and times.
 
 # Arguments
 - `controls`: Matrix of size `(n_drives, n_times)` with control values
 - `times`: Vector of sample times (must start at 0)
+
+# Keyword Arguments
+- `drive_name`: Name of the drive variable (default `:u`)
 """
-function LinearSplinePulse(controls::AbstractMatrix, times::AbstractVector)
+function LinearSplinePulse(controls::AbstractMatrix, times::AbstractVector; drive_name::Symbol=:u)
     interp = LinearInterpolation(controls, times)
-    return LinearSplinePulse(interp, Float64(times[end]), size(controls, 1))
+    return LinearSplinePulse(interp, Float64(times[end]), size(controls, 1), drive_name)
 end
 
 evaluate(p::LinearSplinePulse, t) = p.controls(t)
@@ -154,15 +179,17 @@ derivatives for exact reconstruction after optimization.
 - `controls::I`: CubicHermiteSpline from DataInterpolations
 - `duration::Float64`: Total pulse duration
 - `n_drives::Int`: Number of control drives
+- `drive_name::Symbol`: Name of the drive variable (default `:u`)
 """
-struct CubicSplinePulse{I<:CubicHermiteSpline} <: AbstractPulse
+struct CubicSplinePulse{I<:CubicHermiteSpline} <: AbstractSplinePulse
     controls::I
     duration::Float64
     n_drives::Int
+    drive_name::Symbol
 end
 
 """
-    CubicSplinePulse(controls::AbstractMatrix, derivatives::AbstractMatrix, times::AbstractVector)
+    CubicSplinePulse(controls::AbstractMatrix, derivatives::AbstractMatrix, times::AbstractVector; drive_name=:u)
 
 Create a cubic Hermite spline pulse from control values, derivatives, and times.
 
@@ -170,14 +197,17 @@ Create a cubic Hermite spline pulse from control values, derivatives, and times.
 - `controls`: Matrix of size `(n_drives, n_times)` with control values
 - `derivatives`: Matrix of size `(n_drives, n_times)` with control derivatives
 - `times`: Vector of sample times (must start at 0)
+
+# Keyword Arguments
+- `drive_name`: Name of the drive variable (default `:u`)
 """
-function CubicSplinePulse(controls::AbstractMatrix, derivatives::AbstractMatrix, times::AbstractVector)
+function CubicSplinePulse(controls::AbstractMatrix, derivatives::AbstractMatrix, times::AbstractVector; drive_name::Symbol=:u)
     interp = CubicHermiteSpline(derivatives, controls, times)
-    return CubicSplinePulse(interp, Float64(times[end]), size(controls, 1))
+    return CubicSplinePulse(interp, Float64(times[end]), size(controls, 1), drive_name)
 end
 
 """
-    CubicSplinePulse(controls::AbstractMatrix, times::AbstractVector)
+    CubicSplinePulse(controls::AbstractMatrix, times::AbstractVector; drive_name=:u)
 
 Create a cubic Hermite spline pulse with zero derivatives at all knot points.
 Useful for initial guesses where smoothness constraints will be enforced by optimizer.
@@ -185,10 +215,13 @@ Useful for initial guesses where smoothness constraints will be enforced by opti
 # Arguments
 - `controls`: Matrix of size `(n_drives, n_times)` with control values
 - `times`: Vector of sample times (must start at 0)
+
+# Keyword Arguments
+- `drive_name`: Name of the drive variable (default `:u`)
 """
-function CubicSplinePulse(controls::AbstractMatrix, times::AbstractVector)
+function CubicSplinePulse(controls::AbstractMatrix, times::AbstractVector; drive_name::Symbol=:u)
     derivatives = zeros(size(controls))
-    return CubicSplinePulse(controls, derivatives, times)
+    return CubicSplinePulse(controls, derivatives, times; drive_name)
 end
 
 evaluate(p::CubicSplinePulse, t) = p.controls(t)
@@ -288,7 +321,7 @@ evaluate(p::GaussianPulse, t) = p.f(t)
 using NamedTrajectories: NamedTrajectory, get_times
 
 """
-    ZeroOrderPulse(traj::NamedTrajectory; control_name=:u)
+    ZeroOrderPulse(traj::NamedTrajectory; drive_name=:u)
 
 Construct a ZeroOrderPulse from a NamedTrajectory.
 
@@ -296,16 +329,16 @@ Construct a ZeroOrderPulse from a NamedTrajectory.
 - `traj`: NamedTrajectory with control data
 
 # Keyword Arguments
-- `control_name`: Name of the control component (default: `:u`)
+- `drive_name`: Name of the drive component (default: `:u`)
 """
-function ZeroOrderPulse(traj::NamedTrajectory; control_name::Symbol=:u)
-    controls = traj[control_name]
+function ZeroOrderPulse(traj::NamedTrajectory; drive_name::Symbol=:u)
+    controls = traj[drive_name]
     times = get_times(traj)
-    return ZeroOrderPulse(controls, times)
+    return ZeroOrderPulse(controls, times; drive_name)
 end
 
 """
-    LinearSplinePulse(traj::NamedTrajectory; control_name=:u)
+    LinearSplinePulse(traj::NamedTrajectory; drive_name=:u)
 
 Construct a LinearSplinePulse from a NamedTrajectory.
 
@@ -313,16 +346,16 @@ Construct a LinearSplinePulse from a NamedTrajectory.
 - `traj`: NamedTrajectory with control data
 
 # Keyword Arguments
-- `control_name`: Name of the control component (default: `:u`)
+- `drive_name`: Name of the drive component (default: `:u`)
 """
-function LinearSplinePulse(traj::NamedTrajectory; control_name::Symbol=:u)
-    controls = traj[control_name]
+function LinearSplinePulse(traj::NamedTrajectory; drive_name::Symbol=:u)
+    controls = traj[drive_name]
     times = get_times(traj)
-    return LinearSplinePulse(controls, times)
+    return LinearSplinePulse(controls, times; drive_name)
 end
 
 """
-    CubicSplinePulse(traj::NamedTrajectory; control_name=:u, derivative_name=:du)
+    CubicSplinePulse(traj::NamedTrajectory; drive_name=:u, derivative_name=:du)
 
 Construct a CubicSplinePulse (Hermite) from a NamedTrajectory using both 
 control values and derivatives.
@@ -331,14 +364,14 @@ control values and derivatives.
 - `traj`: NamedTrajectory with control and derivative data
 
 # Keyword Arguments
-- `control_name`: Name of the control component (default: `:u`)
+- `drive_name`: Name of the drive component (default: `:u`)
 - `derivative_name`: Name of the derivative component (default: `:du`)
 """
-function CubicSplinePulse(traj::NamedTrajectory; control_name::Symbol=:u, derivative_name::Symbol=:du)
-    controls = traj[control_name]
+function CubicSplinePulse(traj::NamedTrajectory; drive_name::Symbol=:u, derivative_name::Symbol=:du)
+    controls = traj[drive_name]
     derivatives = traj[derivative_name]
     times = get_times(traj)
-    return CubicSplinePulse(controls, derivatives, times)
+    return CubicSplinePulse(controls, derivatives, times; drive_name)
 end
 
 # ============================================================================ #
@@ -346,7 +379,7 @@ end
 # ============================================================================ #
 
 @testitem "ZeroOrderPulse" begin
-    using PiccoloQuantumObjects: ZeroOrderPulse, duration, n_drives, sample
+    using PiccoloQuantumObjects: ZeroOrderPulse, duration, n_drives, sample, drive_name
     
     # Create simple pulse
     controls = [0.0 1.0 0.5 0.0; 0.0 -1.0 -0.5 0.0]
@@ -355,6 +388,7 @@ end
     
     @test duration(pulse) == 1.0
     @test n_drives(pulse) == 2
+    @test drive_name(pulse) == :u  # Default
     
     # Test evaluation (zero-order hold)
     @test pulse(0.0) ≈ [0.0, 0.0]
@@ -366,10 +400,14 @@ end
     sampled, ts = sample(pulse; n_samples=5)
     @test size(sampled) == (2, 5)
     @test length(ts) == 5
+    
+    # Test custom drive_name
+    pulse_custom = ZeroOrderPulse(controls, times; drive_name=:Ω)
+    @test drive_name(pulse_custom) == :Ω
 end
 
 @testitem "LinearSplinePulse" begin
-    using PiccoloQuantumObjects: LinearSplinePulse, duration, n_drives, sample
+    using PiccoloQuantumObjects: LinearSplinePulse, duration, n_drives, sample, drive_name
     
     # Create simple pulse
     controls = [0.0 1.0 0.0; 0.0 -1.0 0.0]
@@ -378,6 +416,7 @@ end
     
     @test duration(pulse) == 1.0
     @test n_drives(pulse) == 2
+    @test drive_name(pulse) == :u  # Default
     
     # Test linear interpolation
     @test pulse(0.0) ≈ [0.0, 0.0]
@@ -389,10 +428,14 @@ end
     # Test sampling
     sampled, ts = sample(pulse; n_samples=5)
     @test size(sampled) == (2, 5)
+    
+    # Test custom drive_name
+    pulse_custom = LinearSplinePulse(controls, times; drive_name=:amplitude)
+    @test drive_name(pulse_custom) == :amplitude
 end
 
 @testitem "CubicSplinePulse" begin
-    using PiccoloQuantumObjects: CubicSplinePulse, duration, n_drives, sample
+    using PiccoloQuantumObjects: CubicSplinePulse, duration, n_drives, sample, drive_name
     
     # Create pulse with explicit derivatives (Hermite spline)
     controls = [0.0 0.5 1.0 0.5 0.0; 0.0 -0.5 -1.0 -0.5 0.0]
@@ -402,6 +445,7 @@ end
     
     @test duration(pulse) == 1.0
     @test n_drives(pulse) == 2
+    @test drive_name(pulse) == :u  # Default
     
     # Test that endpoints are correct
     @test pulse(0.0) ≈ [0.0, 0.0]
@@ -413,6 +457,10 @@ end
     # Cubic spline should be smooth (no discontinuities)
     @test pulse(0.4) isa Vector{Float64}
     @test pulse(0.6) isa Vector{Float64}
+    
+    # Test custom drive_name
+    pulse_custom = CubicSplinePulse(controls, derivatives, times; drive_name=:a)
+    @test drive_name(pulse_custom) == :a
     
     # Test zero-derivative constructor
     pulse_zero_deriv = CubicSplinePulse(controls, times)
