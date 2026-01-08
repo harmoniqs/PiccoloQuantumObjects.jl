@@ -22,12 +22,11 @@ using NamedTrajectories
 H_drift = PAULIS[:Z]
 H_drives = [PAULIS[:X], PAULIS[:Y]]
 
-# Specify time and control bounds
-T_max = 10.0  # Maximum evolution time
+# Specify control bounds
 drive_bounds = [(-1.0, 1.0), (-1.0, 1.0)]  # Control bounds for each drive
 
 # Create the quantum system
-system = QuantumSystem(H_drift, H_drives, T_max, drive_bounds)
+system = QuantumSystem(H_drift, H_drives, drive_bounds)
 
 # ### Working with Quantum States
 
@@ -66,7 +65,6 @@ dissipation_operators = [a'a, a]
 # Create open quantum system
 open_system = OpenQuantumSystem(
     H_drives, 
-    T_max, 
     drive_bounds, 
     dissipation_operators=dissipation_operators
 )
@@ -74,8 +72,8 @@ open_system = OpenQuantumSystem(
 # ### Composite Systems
 
 # Create subsystems
-sys1 = QuantumSystem([PAULIS[:X]], 10.0, [(-1.0, 1.0)])
-sys2 = QuantumSystem([PAULIS[:Y]], 10.0, [(-1.0, 1.0)])
+sys1 = QuantumSystem([PAULIS[:X]], [(-1.0, 1.0)])
+sys2 = QuantumSystem([PAULIS[:Y]], [(-1.0, 1.0)])
 
 # Define coupling
 H_coupling = 0.1 * kron(PAULIS[:Z], PAULIS[:Z])
@@ -85,7 +83,6 @@ composite_sys = CompositeQuantumSystem(
     H_coupling, 
     Matrix{ComplexF64}[], 
     [sys1, sys2], 
-    10.0, 
     Float64[]
 )
 
@@ -99,8 +96,9 @@ using CairoMakie
 
 # Create a trajectory with controls and states
 T_plot = 50
+T_duration = 10.0  # Total evolution time
 controls_plot = 0.5 * sin.(2π * (1:T_plot) / T_plot)
-Δt_plot = fill(T_max / T_plot, T_plot)
+Δt_plot = fill(T_duration / T_plot, T_plot)
 
 # Perform a rollout to get the state evolution
 ψ̃_traj = rollout(ψ_init, hcat(controls_plot, -controls_plot)', Δt_plot, system)

@@ -33,15 +33,14 @@ QuantumSystem
 
 `QuantumSystem`'s are containers for quantum dynamics. Internally, they compute the
 necessary isomorphisms to perform the dynamics in a real vector space. All systems
-require explicit specification of `T_max` (maximum time) and `drive_bounds` (control bounds).
+require explicit specification of `drive_bounds` (control bounds).
 
 =#
 
 H_drift = PAULIS[:Z]
 H_drives = [PAULIS[:X], PAULIS[:Y]]
-T_max = 10.0
 drive_bounds = [(-1.0, 1.0), (-1.0, 1.0)]
-system = QuantumSystem(H_drift, H_drives, T_max, drive_bounds)
+system = QuantumSystem(H_drift, H_drives, drive_bounds)
 
 u_controls = [1.0, 0.0]
 t = 0.0
@@ -69,7 +68,7 @@ drives[2] |> sparse
 =#
 
 H(u, t) = PAULIS[:Z] + u[1] * PAULIS[:X] + u[2] * PAULIS[:Y]
-system = QuantumSystem(H, 10.0, [(-1.0, 1.0), (-1.0, 1.0)])
+system = QuantumSystem(H, [(-1.0, 1.0), (-1.0, 1.0)]; time_dependent=true)
 system.H([1.0, 0.0], 0.0) |> sparse
 
 #=
@@ -84,11 +83,11 @@ is_reachable
 =#
 
 # _Y can be reached by commuting Z and X._
-system = QuantumSystem(PAULIS[:Z], [PAULIS[:X]], 1.0, [(-1.0, 1.0)])
+system = QuantumSystem(PAULIS[:Z], [PAULIS[:X]], [(-1.0, 1.0)])
 is_reachable(PAULIS[:Y], system)
 
 # _Y cannot be reached by X alone._
-system = QuantumSystem([PAULIS[:X]], 1.0, [(-1.0, 1.0)])
+system = QuantumSystem([PAULIS[:X]], [(-1.0, 1.0)])
 is_reachable(PAULIS[:Y], system)
 
 #=
@@ -101,7 +100,7 @@ direct_sum
 =#
 
 # _Create a pair of non-interacting qubits._
-system_1 = QuantumSystem(PAULIS[:Z], [PAULIS[:X], PAULIS[:Y]], 1.0, [(-1.0, 1.0), (-1.0, 1.0)])
-system_2 = QuantumSystem(PAULIS[:Z], [PAULIS[:X], PAULIS[:Y]], 1.0, [(-1.0, 1.0), (-1.0, 1.0)])
+system_1 = QuantumSystem(PAULIS[:Z], [PAULIS[:X], PAULIS[:Y]], [(-1.0, 1.0), (-1.0, 1.0)])
+system_2 = QuantumSystem(PAULIS[:Z], [PAULIS[:X], PAULIS[:Y]], [(-1.0, 1.0), (-1.0, 1.0)])
 system = direct_sum(system_1, system_2)
 get_drift(system) |> sparse

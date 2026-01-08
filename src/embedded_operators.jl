@@ -495,9 +495,8 @@ end
     a = annihilate(3) 
     σ_x = a + a'
     σ_y = -1im*(a - a')
-    T_max = 1.0
     u_bounds = ones(2)
-    system = QuantumSystem([kron(σ_x, σ_x), kron(σ_y, σ_y)], T_max, u_bounds)
+    system = QuantumSystem([kron(σ_x, σ_x), kron(σ_y, σ_y)], u_bounds)
 
     op_explicit_qubit = EmbeddedOperator(
         CZ,
@@ -632,7 +631,7 @@ end
     @test embedded_op.operator == kron(embed(I(2), 1:2, 3), embed(subspace_op, subspace_op_indices, 3^2))
 
     # Composite system
-    system = CompositeQuantumSystem([QuantumSystem([P], 1.0, [(-1.0, 1.0)]) for P ∈ PAULIS], 1.0, Float64[])
+    system = CompositeQuantumSystem([QuantumSystem([P], [(-1.0, 1.0)]) for P ∈ PAULIS], Float64[])
     embedded_op = EmbeddedOperator(subspace_op, [2, 3], fill(1:2, length(PAULIS)), system)
     # 4 PAULIS
     @test embedded_op.operator == kron(I(2), subspace_op, I(2))

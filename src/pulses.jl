@@ -118,7 +118,8 @@ Create a zero-order hold pulse from control samples and times.
 - `drive_name`: Name of the drive variable (default `:u`)
 """
 function ZeroOrderPulse(controls::AbstractMatrix, times::AbstractVector; drive_name::Symbol=:u)
-    interp = ConstantInterpolation(controls, times)
+    # Materialize to Matrix/Vector to ensure consistent type parameters
+    interp = ConstantInterpolation(Matrix(controls), collect(times))
     return ZeroOrderPulse(interp, Float64(times[end]), size(controls, 1), drive_name)
 end
 
@@ -159,7 +160,8 @@ Create a linearly interpolated pulse from control samples and times.
 - `drive_name`: Name of the drive variable (default `:u`)
 """
 function LinearSplinePulse(controls::AbstractMatrix, times::AbstractVector; drive_name::Symbol=:u)
-    interp = LinearInterpolation(controls, times)
+    # Materialize to Matrix/Vector to ensure consistent type parameters
+    interp = LinearInterpolation(Matrix(controls), collect(times))
     return LinearSplinePulse(interp, Float64(times[end]), size(controls, 1), drive_name)
 end
 
@@ -202,7 +204,8 @@ Create a cubic Hermite spline pulse from control values, derivatives, and times.
 - `drive_name`: Name of the drive variable (default `:u`)
 """
 function CubicSplinePulse(controls::AbstractMatrix, derivatives::AbstractMatrix, times::AbstractVector; drive_name::Symbol=:u)
-    interp = CubicHermiteSpline(derivatives, controls, times)
+    # Materialize to Matrix to ensure consistent type parameters across construction methods
+    interp = CubicHermiteSpline(Matrix(derivatives), Matrix(controls), collect(times))
     return CubicSplinePulse(interp, Float64(times[end]), size(controls, 1), drive_name)
 end
 

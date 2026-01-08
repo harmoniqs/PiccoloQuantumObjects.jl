@@ -88,3 +88,100 @@ end
 
 # Callable: sample solution at any time
 (traj::UnitaryTrajectory)(t::Real) = traj.solution(t)
+
+# ============================================================================ #
+# Tests
+# ============================================================================ #
+
+@testitem "UnitaryTrajectory construction" begin
+    using LinearAlgebra
+    
+    # Simple 2-level system
+    system = QuantumSystem(PAULIS.Z, [PAULIS.X], [1.0])
+    
+    # Create with duration
+    T = 1.0
+    X_gate = ComplexF64[0 1; 1 0]
+    qtraj = UnitaryTrajectory(system, X_gate, T)
+    
+    @test qtraj isa UnitaryTrajectory
+    @test qtraj.system === system
+    @test qtraj.goal === X_gate
+    @test qtraj.initial ≈ Matrix{ComplexF64}(I, 2, 2)
+    
+    # Create with explicit pulse
+    times = [0.0, 0.5, 1.0]
+    controls = 0.1 * randn(1, 3)
+    pulse = ZeroOrderPulse(controls, times)
+    qtraj2 = UnitaryTrajectory(system, pulse, X_gate)
+    
+    @test qtraj2 isa UnitaryTrajectory
+    @test duration(qtraj2) ≈ 1.0
+end
+
+@testitem "UnitaryTrajectory callable" begin
+    using LinearAlgebra
+    
+    system = QuantumSystem([PAULIS.X], [1.0])
+    
+    T = 1.0
+    X_gate = ComplexF64[0 1; 1 0]
+    qtraj = UnitaryTrajectory(system, X_gate, T)
+    
+    # Test at initial time
+    U0 = qtraj(0.0)
+    @test U0 ≈ Matrix{ComplexF64}(I, 2, 2)
+    
+    # Test at intermediate time
+    U_mid = qtraj(0.5)
+    @test U_mid isa Matrix{ComplexF64}
+    @test size(U_mid) == (2, 2)
+    
+    # Test at final time
+    U_final = qtraj(T)
+    @test U_final isa Matrix{ComplexF64}
+end
+
+@testitem "UnitaryTrajectory fidelity" begin
+    using LinearAlgebra
+    
+    # System that naturally implements X gate
+    σx = ComplexF64[0 1; 1 0]
+    system = QuantumSystem([σx], [1.0])
+    
+    # Create pulse that implements X gate: exp(-i π/2 σx) = -i σx
+    T = π / 2
+    times = [0.0, T]
+    controls = ones(1, 2)  # Constant amplitude 1
+    pulse = ZeroOrderPulse(controls, times)
+    
+    X_gate = ComplexF64[0 1; 1 0]
+    qtraj = UnitaryTrajectory(system, pulse, X_gate)
+    
+    # Fidelity should be high
+    fid = fidelity(qtraj)
+    @test fid > 0.99
+end
+
+@testitem "UnitaryTrajectory with EmbeddedOperator goal" begin
+    using LinearAlgebra
+    
+    # 3-level system with embedded 2-level gate
+    H_drift = diagm(ComplexF64[1.0, 0.0, -1.0])
+    H_drive = zeros(ComplexF64, 3, 3)
+    H_drive[1,2] = H_drive[2,1] = 1.0
+    system = QuantumSystem(H_drift, [H_drive], [1.0])
+    
+    # Embedded X gate on levels 1,2
+    X_embedded = EmbeddedOperator(:X, [1, 2], 3)
+    
+    T = 1.0
+    qtraj = UnitaryTrajectory(system, X_embedded, T)
+    
+    @test qtraj.goal === X_embedded
+    @test qtraj.goal isa EmbeddedOperator
+    
+    # Fidelity with subspace
+    fid = fidelity(qtraj; subspace=[1, 2])
+    @test fid isa Real
+end

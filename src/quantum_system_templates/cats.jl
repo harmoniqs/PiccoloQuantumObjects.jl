@@ -31,7 +31,6 @@ function CatSystem(;
     cat_levels::Int=13,
     buffer_levels::Int=3,
     prefactor::Real=1,
-    T_max::Real=1.0,
     drive_bounds::Vector{<:Real}=[1.0, 1.0]
 )
     params = Dict(
@@ -64,7 +63,6 @@ function CatSystem(;
     return OpenQuantumSystem(
         H_drift,
         H_drives,
-        T_max,
         drive_bounds,
         dissipation_operators=L_dissipators,
         params=params

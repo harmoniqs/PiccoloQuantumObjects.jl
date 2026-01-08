@@ -18,10 +18,10 @@ lifted to the full Hilbert space.
 
 =#
 
-system_1 = QuantumSystem([PAULIS[:X]], 1.0, [(-1.0, 1.0)])
-system_2 = QuantumSystem([PAULIS[:Y]], 1.0, [(-1.0, 1.0)])
+system_1 = QuantumSystem([PAULIS[:X]], [(-1.0, 1.0)])
+system_2 = QuantumSystem([PAULIS[:Y]], [(-1.0, 1.0)])
 H_drift = PAULIS[:Z] ⊗ PAULIS[:Z]
-system = CompositeQuantumSystem(H_drift, Matrix{ComplexF64}[], [system_1, system_2], 1.0, Float64[]);
+system = CompositeQuantumSystem(H_drift, Matrix{ComplexF64}[], [system_1, system_2], Float64[]);
 
 # _The drift Hamiltonian is the ZZ coupling._
 get_drift(system) |> sparse

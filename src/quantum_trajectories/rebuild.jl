@@ -162,3 +162,137 @@ end
 function _rebuild_pulse(p::LinearSplinePulse, u::Matrix, times::Vector)
     return LinearSplinePulse(u, times; drive_name=p.drive_name)
 end
+
+# ============================================================================ #
+# Tests
+# ============================================================================ #
+
+@testitem "rebuild UnitaryTrajectory" begin
+    using LinearAlgebra
+    using NamedTrajectories
+    
+    # System setup
+    system = QuantumSystem(PAULIS.Z, [PAULIS.X], [1.0])
+    
+    # Create trajectory
+    T = 1.0
+    X_gate = ComplexF64[0 1; 1 0]
+    qtraj = UnitaryTrajectory(system, X_gate, T)
+    
+    # Convert to NamedTrajectory and modify controls
+    N = 11
+    traj = NamedTrajectory(qtraj, N)
+    traj.u .= 0.5 * randn(1, N)
+    
+    # Rebuild
+    qtraj2 = rebuild(qtraj, traj)
+    
+    @test qtraj2 isa UnitaryTrajectory
+    @test qtraj2.system === system
+    @test qtraj2.goal === X_gate
+    @test qtraj2.initial ≈ qtraj.initial
+    
+    # Verify the pulse was updated
+    @test qtraj2.pulse !== qtraj.pulse
+end
+
+@testitem "rebuild KetTrajectory" begin
+    using LinearAlgebra
+    using NamedTrajectories
+    
+    system = QuantumSystem(PAULIS.Z, [PAULIS.X], [1.0])
+    
+    T = 1.0
+    ψ0 = ComplexF64[1.0, 0.0]
+    ψg = ComplexF64[0.0, 1.0]
+    qtraj = KetTrajectory(system, ψ0, ψg, T)
+    
+    N = 11
+    traj = NamedTrajectory(qtraj, N)
+    traj.u .= 0.5 * randn(1, N)
+    
+    qtraj2 = rebuild(qtraj, traj)
+    
+    @test qtraj2 isa KetTrajectory
+    @test qtraj2.system === system
+    @test qtraj2.initial ≈ ψ0
+    @test qtraj2.goal ≈ ψg
+end
+
+@testitem "rebuild EnsembleKetTrajectory" begin
+    using LinearAlgebra
+    using NamedTrajectories
+    
+    system = QuantumSystem(PAULIS.Z, [PAULIS.X], [1.0])
+    
+    T = 1.0
+    initials = [ComplexF64[1.0, 0.0], ComplexF64[0.0, 1.0]]
+    goals = [ComplexF64[0.0, 1.0], ComplexF64[1.0, 0.0]]
+    weights = [0.6, 0.4]
+    
+    qtraj = EnsembleKetTrajectory(system, initials, goals, T; weights=weights)
+    
+    N = 11
+    traj = NamedTrajectory(qtraj, N)
+    traj.u .= 0.5 * randn(1, N)
+    
+    qtraj2 = rebuild(qtraj, traj)
+    
+    @test qtraj2 isa EnsembleKetTrajectory
+    @test qtraj2.system === system
+    @test qtraj2.weights ≈ weights
+    @test length(qtraj2.initials) == 2
+end
+
+@testitem "rebuild DensityTrajectory" begin
+    using LinearAlgebra
+    using NamedTrajectories
+    
+    L = ComplexF64[0.1 0.0; 0.0 0.0]
+    system = OpenQuantumSystem(PAULIS.Z, [PAULIS.X], [1.0]; dissipation_operators=[L])
+    
+    T = 1.0
+    ρ0 = ComplexF64[1.0 0.0; 0.0 0.0]
+    ρg = ComplexF64[0.0 0.0; 0.0 1.0]
+    
+    qtraj = DensityTrajectory(system, ρ0, ρg, T)
+    
+    N = 11
+    traj = NamedTrajectory(qtraj, N)
+    traj.u .= 0.5 * randn(1, N)
+    
+    qtraj2 = rebuild(qtraj, traj)
+    
+    @test qtraj2 isa DensityTrajectory
+    @test qtraj2.system === system
+    @test qtraj2.initial ≈ ρ0
+    @test qtraj2.goal ≈ ρg
+end
+
+@testitem "rebuild with CubicSplinePulse" begin
+    using LinearAlgebra
+    using NamedTrajectories
+    
+    system = QuantumSystem(PAULIS.Z, [PAULIS.X], [1.0])
+    
+    # Create with CubicSplinePulse
+    T = 1.0
+    times = collect(range(0.0, T, length=11))
+    u = 0.1 * randn(1, 11)
+    du = zeros(1, 11)
+    pulse = CubicSplinePulse(u, du, times)
+    
+    X_gate = ComplexF64[0 1; 1 0]
+    qtraj = UnitaryTrajectory(system, pulse, X_gate)
+    
+    # Convert and modify
+    traj = NamedTrajectory(qtraj, times)
+    traj.u .= 0.5 * randn(1, 11)
+    traj.du .= 0.1 * randn(1, 11)
+    
+    # Rebuild
+    qtraj2 = rebuild(qtraj, traj)
+    
+    @test qtraj2 isa UnitaryTrajectory
+    @test qtraj2.pulse isa CubicSplinePulse
+end

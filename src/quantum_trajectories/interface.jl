@@ -150,3 +150,85 @@ function Rollouts.fidelity(traj::DensityTrajectory)
     ρ_final = traj.solution.u[end]
     return real(tr(ρ_final * traj.goal))
 end
+
+# ============================================================================ #
+# Tests
+# ============================================================================ #
+
+@testitem "Common interface - getters" begin
+    using LinearAlgebra
+    
+    # UnitaryTrajectory
+    system = QuantumSystem(PAULIS.Z, [PAULIS.X], [1.0])
+    
+    X_gate = ComplexF64[0 1; 1 0]
+    qtraj = UnitaryTrajectory(system, X_gate, 1.0)
+    
+    @test get_system(qtraj) === system
+    @test get_pulse(qtraj) isa AbstractPulse
+    @test get_initial(qtraj) ≈ Matrix{ComplexF64}(I, 2, 2)
+    @test get_goal(qtraj) === X_gate
+    @test duration(qtraj) ≈ 1.0
+    
+    # KetTrajectory
+    ψ0 = ComplexF64[1.0, 0.0]
+    ψg = ComplexF64[0.0, 1.0]
+    qtraj_ket = KetTrajectory(system, ψ0, ψg, 1.0)
+    
+    @test get_system(qtraj_ket) === system
+    @test get_initial(qtraj_ket) ≈ ψ0
+    @test get_goal(qtraj_ket) ≈ ψg
+    
+    # EnsembleKetTrajectory
+    initials = [ψ0, ψg]
+    goals = [ψg, ψ0]
+    qtraj_ens = EnsembleKetTrajectory(system, initials, goals, 1.0)
+    
+    @test get_system(qtraj_ens) === system
+    @test get_initial(qtraj_ens) == qtraj_ens.initials
+    @test get_goal(qtraj_ens) == qtraj_ens.goals
+end
+
+@testitem "Common interface - name accessors" begin
+    using LinearAlgebra
+    
+    system = QuantumSystem([PAULIS.X], [1.0])
+    
+    # Test state_name for each trajectory type
+    qtraj_u = UnitaryTrajectory(system, ComplexF64[0 1; 1 0], 1.0)
+    @test state_name(qtraj_u) == :Ũ⃗
+    
+    qtraj_k = KetTrajectory(system, ComplexF64[1, 0], ComplexF64[0, 1], 1.0)
+    @test state_name(qtraj_k) == :ψ̃
+    
+    qtraj_e = EnsembleKetTrajectory(system, [ComplexF64[1, 0]], [ComplexF64[0, 1]], 1.0)
+    @test state_name(qtraj_e) == :ψ̃
+    @test state_names(qtraj_e) == [:ψ̃1]
+    
+    # Test drive_name propagation
+    times = [0.0, 1.0]
+    pulse = ZeroOrderPulse(zeros(1, 2), times; drive_name=:control)
+    qtraj_custom = UnitaryTrajectory(system, pulse, ComplexF64[0 1; 1 0])
+    @test drive_name(qtraj_custom) == :control
+    
+    # Test time_name and timestep_name (always fixed)
+    @test time_name(qtraj_u) == :t
+    @test timestep_name(qtraj_u) == :Δt
+end
+
+@testitem "Interface - DensityTrajectory getters" begin
+    using LinearAlgebra
+    
+    L = ComplexF64[0.1 0.0; 0.0 0.0]
+    system = OpenQuantumSystem(PAULIS.Z, [PAULIS.X], [1.0]; dissipation_operators=[L])
+    
+    ρ0 = ComplexF64[1.0 0.0; 0.0 0.0]
+    ρg = ComplexF64[0.0 0.0; 0.0 1.0]
+    qtraj = DensityTrajectory(system, ρ0, ρg, 1.0)
+    
+    @test get_system(qtraj) === system
+    @test get_initial(qtraj) ≈ ρ0
+    @test get_goal(qtraj) ≈ ρg
+    @test state_name(qtraj) == :ρ⃗̃
+    @test duration(qtraj) ≈ 1.0
+end

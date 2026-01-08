@@ -16,7 +16,6 @@ The variational operators represent directions of uncertainty or perturbation in
 - `H::Function`: The Hamiltonian function: (u, t) -> H(u, t)
 - `G::Function`: The isomorphic generator function: (u, t) -> G(u, t)
 - `G_vars::AbstractVector{<:Function}`: Variational generator functions, one for each perturbation direction
-- `T_max::Float64`: Maximum evolution time
 - `drive_bounds::Vector{Tuple{Float64, Float64}}`: Drive amplitude bounds
 - `n_drives::Int`: The number of control drives in the system
 - `levels::Int`: The number of levels (dimension) in the system
@@ -27,7 +26,6 @@ struct VariationalQuantumSystem{F1<:Function, F2<:Function, F⃗3<:AbstractVecto
     H::F1 
     G::F2
     G_vars::F⃗3
-    T_max::Float64
     drive_bounds::Vector{Tuple{Float64, Float64}}
     n_drives::Int 
     levels::Int
@@ -38,7 +36,6 @@ end
         H_drift::AbstractMatrix,
         H_drives::AbstractVector{<:AbstractMatrix},
         H_vars::AbstractVector{<:AbstractMatrix},
-        T_max::Float64,
         drive_bounds::DriveBounds
     )
 
@@ -48,7 +45,6 @@ Construct a VariationalQuantumSystem from drift, drive, and variational Hamilton
 - `H_drift::AbstractMatrix`: The drift (time-independent) Hamiltonian
 - `H_drives::AbstractVector{<:AbstractMatrix}`: Vector of drive Hamiltonians for control
 - `H_vars::AbstractVector{<:AbstractMatrix}`: Vector of variational Hamiltonians representing perturbation directions
-- `T_max::Float64`: Maximum evolution time
 - `drive_bounds::DriveBounds`: Drive amplitude bounds for each control. Can be:
   - Tuples `(lower, upper)` for asymmetric bounds
   - Scalars which are interpreted as symmetric bounds `(-value, value)`
@@ -62,7 +58,6 @@ varsys = VariationalQuantumSystem(
     PAULIS[:Z],                    # drift
     [PAULIS[:X], PAULIS[:Y]],      # drives
     [PAULIS[:X]],                  # variational perturbations
-    10.0,                          # T_max
     [1.0, 1.0]                     # symmetric bounds: [(-1.0, 1.0), (-1.0, 1.0)]
 )
 ```
@@ -71,7 +66,6 @@ function VariationalQuantumSystem(
     H_drift::AbstractMatrix{<:Number},
     H_drives::AbstractVector{<:AbstractMatrix{<:Number}},
     H_vars::AbstractVector{<:AbstractMatrix{<:Number}},
-    T_max::Float64,
     drive_bounds::DriveBounds
 )
     @assert !isempty(H_vars) "At least one variational operator is required"
@@ -97,14 +91,13 @@ function VariationalQuantumSystem(
     end
 
     return VariationalQuantumSystem(
-        H, G, G_vars, T_max, drive_bounds, n_drives, levels
+        H, G, G_vars, drive_bounds, n_drives, levels
     )
 end
 
 function VariationalQuantumSystem(
     H_drives::AbstractVector{<:AbstractMatrix{ℂ}},
     H_vars::AbstractVector{<:AbstractMatrix{<:Number}},
-    T_max::Float64,
     drive_bounds::DriveBounds
 ) where ℂ <: Number
     @assert !isempty(H_drives) "At least one drive is required"
@@ -113,7 +106,6 @@ function VariationalQuantumSystem(
         spzeros(ℂ, size(H_drives[1])), 
         H_drives, 
         H_vars,
-        T_max,
         drive_bounds
     )
 end
@@ -122,7 +114,6 @@ function VariationalQuantumSystem(
     H::F1,
     H_vars::F⃗2,
     n_drives::Int,
-    T_max::Float64,
     drive_bounds::DriveBounds
 ) where {F1 <: Function, F⃗2 <: AbstractVector{<:Function}}
     @assert !isempty(H_vars) "At least one variational operator is required"
@@ -132,7 +123,7 @@ function VariationalQuantumSystem(
     G = a -> Isomorphisms.G(sparse(H(a)))
     G_vars = Function[a -> Isomorphisms.G(sparse(H_v(a))) for H_v in H_vars]
     levels = size(H(zeros(n_drives)), 1)
-    return VariationalQuantumSystem(H, G, G_vars, T_max, drive_bounds, n_drives, levels)
+    return VariationalQuantumSystem(H, G, G_vars, drive_bounds, n_drives, levels)
 end
 
 # ******************************************************************************* #
@@ -141,7 +132,6 @@ end
     using PiccoloQuantumObjects: PAULIS, VariationalQuantumSystem, Isomorphisms
     using LinearAlgebra: I
     
-    T_max = 10.0
     drive_bounds = [(-1.0, 1.0), (-1.0, 1.0)]
     
     # default
@@ -149,7 +139,6 @@ end
         0.0 * PAULIS.Z,
         [PAULIS.X, PAULIS.Y],
         [PAULIS.X, PAULIS.Y],
-        T_max,
         drive_bounds
     )
 
@@ -157,7 +146,6 @@ end
     varsys2 = VariationalQuantumSystem(
         [PAULIS.X, PAULIS.Y],
         [PAULIS.X, PAULIS.Y],
-        T_max,
         drive_bounds
     )
 
@@ -169,7 +157,6 @@ end
         @test varsys isa VariationalQuantumSystem
         @test varsys.n_drives == 2
         @test length(varsys.G_vars) == 2
-        @test varsys.T_max == T_max
         @test varsys.drive_bounds == [(-1.0, 1.0), (-1.0, 1.0)]
         @test varsys.G(a) ≈ G
         @test varsys.G_vars[1](a) ≈ G_X
@@ -180,7 +167,6 @@ end
     varsys = VariationalQuantumSystem(
         [PAULIS.X, PAULIS.Y],
         [PAULIS.X],
-        T_max,
         drive_bounds
     )
     @test varsys isa VariationalQuantumSystem
@@ -194,7 +180,6 @@ end
         a -> a[1] * PAULIS.X + a[2] * PAULIS.Y,
         [a -> a[1] * PAULIS.X, a -> PAULIS.Y],
         2,
-        T_max,
         drive_bounds
     )
     @test varsys isa VariationalQuantumSystem
@@ -212,19 +197,18 @@ end
     H_drift = PAULIS.Z
     H_drives = [PAULIS.X, PAULIS.Y]
     H_vars = [PAULIS.X]
-    T_max = 1.0
 
     # Test with scalar bounds
-    sys_scalar = VariationalQuantumSystem(H_drift, H_drives, H_vars, T_max, [1.0, 1.5])
+    sys_scalar = VariationalQuantumSystem(H_drift, H_drives, H_vars, [1.0, 1.5])
     @test sys_scalar.drive_bounds == [(-1.0, 1.0), (-1.5, 1.5)]
 
     # Test with tuple bounds
-    sys_tuple = VariationalQuantumSystem(H_drift, H_drives, H_vars, T_max, 
+    sys_tuple = VariationalQuantumSystem(H_drift, H_drives, H_vars, 
                                          [(-0.5, 1.0), (-1.5, 0.5)])
     @test sys_tuple.drive_bounds == [(-0.5, 1.0), (-1.5, 0.5)]
 
     # Test with mixed bounds (scalars and tuples) - requires explicit type annotation
     mixed_bounds = Union{Float64, Tuple{Float64,Float64}}[1.0, (-0.5, 1.5)]
-    sys_mixed = VariationalQuantumSystem(H_drift, H_drives, H_vars, T_max, mixed_bounds)
+    sys_mixed = VariationalQuantumSystem(H_drift, H_drives, H_vars, mixed_bounds)
     @test sys_mixed.drive_bounds == [(-1.0, 1.0), (-0.5, 1.5)]
 end

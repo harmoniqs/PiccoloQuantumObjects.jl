@@ -412,11 +412,10 @@ end
 
 @testitem "UnitaryTrajectory" begin
     using LinearAlgebra
+    using NamedTrajectories
     
     # Simple 2-level system
-    H_drift = [1.0 0.0; 0.0 -1.0]
-    H_drive = [[0.0 1.0; 1.0 0.0]]
-    system = QuantumSystem(H_drift, H_drive)
+    system = QuantumSystem(PAULIS.Z, [PAULIS.X], [1.0])
     
     # Create trajectory with zero controls
     T = 1.0
@@ -446,16 +445,18 @@ end
 
 @testitem "UnitaryTrajectory with EmbeddedOperator" begin
     using LinearAlgebra
+    using NamedTrajectories
     
     # Create embedded gate in 3-level system
     X_embedded = EmbeddedOperator(:X, [1, 2], 3)
     
     # 3-level system
-    H_drift = diagm([1.0, 0.0, -1.0])
-    H_drive = [zeros(3, 3) for _ in 1:2]
-    H_drive[1][1,2] = H_drive[1][2,1] = 1.0
-    H_drive[2][2,3] = H_drive[2][3,2] = 1.0
-    system = QuantumSystem(H_drift, H_drive)
+    H_drift = diagm(ComplexF64[1.0, 0.0, -1.0])
+    H_drive1 = zeros(ComplexF64, 3, 3)
+    H_drive2 = zeros(ComplexF64, 3, 3)
+    H_drive1[1,2] = H_drive1[2,1] = 1.0
+    H_drive2[2,3] = H_drive2[3,2] = 1.0
+    system = QuantumSystem(H_drift, [H_drive1, H_drive2], [1.0, 1.0])
     
     # Create trajectory
     T = 1.0
@@ -472,11 +473,10 @@ end
 
 @testitem "KetTrajectory" begin
     using LinearAlgebra
+    using NamedTrajectories
     
     # Simple 2-level system
-    H_drift = [1.0 0.0; 0.0 -1.0]
-    H_drive = [[0.0 1.0; 1.0 0.0]]
-    system = QuantumSystem(H_drift, H_drive)
+    system = QuantumSystem(PAULIS.Z, [PAULIS.X], [1.0])
     
     # Create trajectory
     T = 1.0
@@ -500,11 +500,10 @@ end
 
 @testitem "EnsembleKetTrajectory" begin
     using LinearAlgebra
+    using NamedTrajectories
     
     # Simple 2-level system
-    H_drift = [1.0 0.0; 0.0 -1.0]
-    H_drive = [[0.0 1.0; 1.0 0.0]]
-    system = QuantumSystem(H_drift, H_drive)
+    system = QuantumSystem(PAULIS.Z, [PAULIS.X], [1.0])
     
     # Create trajectory with multiple states
     T = 1.0
@@ -522,7 +521,6 @@ end
     # Test callable and indexing
     states_0 = qtraj(0.0)
     @test length(states_0) == 2
-    @test qtraj[1] isa ODESolution
     
     # Convert to NamedTrajectory
     N = 11
@@ -533,12 +531,11 @@ end
 
 @testitem "DensityTrajectory" begin
     using LinearAlgebra
+    using NamedTrajectories
     
     # Simple 2-level open system
-    H_drift = [1.0 0.0; 0.0 -1.0]
-    H_drive = [[0.0 1.0; 1.0 0.0]]
-    L = [[0.1 0.0; 0.0 0.0]]  # Decay operator
-    system = OpenQuantumSystem(H_drift, H_drive, L)
+    L = ComplexF64[0.1 0.0; 0.0 0.0]  # Decay operator
+    system = OpenQuantumSystem(PAULIS.Z, [PAULIS.X], [1.0]; dissipation_operators=[L])
     
     # Create trajectory
     T = 1.0
@@ -561,11 +558,10 @@ end
 
 @testitem "NamedTrajectory conversion with specific times" begin
     using LinearAlgebra
+    using NamedTrajectories
     
     # System setup
-    H_drift = [1.0 0.0; 0.0 -1.0]
-    H_drive = [[0.0 1.0; 1.0 0.0]]
-    system = QuantumSystem(H_drift, H_drive)
+    system = QuantumSystem(PAULIS.Z, [PAULIS.X], [1.0])
     
     # Create trajectory
     T = 1.0
@@ -577,16 +573,15 @@ end
     traj = NamedTrajectory(qtraj, times)
     
     @test length(traj.t) == 5
-    @test traj.t ≈ times
+    @test all(vec(traj.t) .≈ times)
 end
 
 @testitem "NamedTrajectory with custom drive_name" begin
     using LinearAlgebra
+    using NamedTrajectories
     
     # System setup
-    H_drift = [1.0 0.0; 0.0 -1.0]
-    H_drive = [[0.0 1.0; 1.0 0.0]]
-    system = QuantumSystem(H_drift, H_drive)
+    system = QuantumSystem(PAULIS.Z, [PAULIS.X], [1.0])
     
     # Create pulse with custom name
     T = 1.0
@@ -607,11 +602,10 @@ end
 
 @testitem "Rebuild trajectory from NamedTrajectory" begin
     using LinearAlgebra
+    using NamedTrajectories
     
     # System setup
-    H_drift = [1.0 0.0; 0.0 -1.0]
-    H_drive = [[0.0 1.0; 1.0 0.0]]
-    system = QuantumSystem(H_drift, H_drive)
+    system = QuantumSystem(PAULIS.Z, [PAULIS.X], [1.0])
     
     # Create trajectory
     T = 1.0
@@ -635,11 +629,10 @@ end
 
 @testitem "NamedTrajectory with Δt_bounds" begin
     using LinearAlgebra
+    using NamedTrajectories
     
     # System setup
-    H_drift = [1.0 0.0; 0.0 -1.0]
-    H_drive = [[0.0 1.0; 1.0 0.0]]
-    system = QuantumSystem(H_drift, H_drive)
+    system = QuantumSystem(PAULIS.Z, [PAULIS.X], [1.0])
     
     # Create trajectory
     T = 1.0

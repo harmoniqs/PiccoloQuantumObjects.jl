@@ -97,7 +97,7 @@ function EnsembleKetTrajectory(
     algorithm=MagnusGL4(),
 )
     times = [0.0, T]
-    controls = zeros(system.n_drives, 2)
+    controls = randn(system.n_drives, 2)
     pulse = ZeroOrderPulse(controls, times; drive_name)
     return EnsembleKetTrajectory(system, pulse, initials, goals; weights, algorithm)
 end
@@ -108,3 +108,106 @@ end
 # Indexing: get individual trajectory solution
 Base.getindex(traj::EnsembleKetTrajectory, i::Int) = traj.solution[i]
 Base.length(traj::EnsembleKetTrajectory) = length(traj.initials)
+
+# ============================================================================ #
+# Tests
+# ============================================================================ #
+
+@testitem "EnsembleKetTrajectory construction" begin
+    using LinearAlgebra
+    
+    # Simple 2-level system
+    system = QuantumSystem(PAULIS.Z, [PAULIS.X], [1.0])
+    
+    # Create with duration
+    T = 1.0
+    initials = [ComplexF64[1.0, 0.0], ComplexF64[0.0, 1.0]]
+    goals = [ComplexF64[0.0, 1.0], ComplexF64[1.0, 0.0]]
+    
+    qtraj = EnsembleKetTrajectory(system, initials, goals, T)
+    
+    @test qtraj isa EnsembleKetTrajectory
+    @test qtraj.system === system
+    @test length(qtraj.initials) == 2
+    @test length(qtraj.goals) == 2
+    @test length(qtraj.weights) == 2
+    @test sum(qtraj.weights) ≈ 1.0  # Default uniform weights
+    
+    # Create with explicit pulse and weights
+    times = [0.0, 0.5, 1.0]
+    controls = 0.1 * randn(1, 3)
+    pulse = ZeroOrderPulse(controls, times)
+    weights = [0.7, 0.3]
+    
+    qtraj2 = EnsembleKetTrajectory(system, pulse, initials, goals; weights=weights)
+    
+    @test qtraj2 isa EnsembleKetTrajectory
+    @test qtraj2.weights ≈ weights
+end
+
+@testitem "EnsembleKetTrajectory callable and indexing" begin
+    using LinearAlgebra
+    using OrdinaryDiffEqLinear
+    
+    system = QuantumSystem([PAULIS.X], [1.0])
+    
+    T = 1.0
+    initials = [ComplexF64[1.0, 0.0], ComplexF64[0.0, 1.0]]
+    goals = [ComplexF64[0.0, 1.0], ComplexF64[1.0, 0.0]]
+    
+    qtraj = EnsembleKetTrajectory(system, initials, goals, T)
+    
+    # Test length
+    @test length(qtraj) == 2
+    
+    # Test callable - returns all states at time t
+    states_0 = qtraj(0.0)
+    @test length(states_0) == 2
+    @test states_0[1] ≈ initials[1]
+    @test states_0[2] ≈ initials[2]
+    
+    # Test indexing - returns individual solution
+    sol1 = qtraj[1]
+    @test sol1 isa ODESolution
+    @test sol1(0.0) ≈ initials[1]
+    
+    sol2 = qtraj[2]
+    @test sol2(0.0) ≈ initials[2]
+end
+
+@testitem "EnsembleKetTrajectory fidelity" begin
+    using LinearAlgebra
+    
+    # System with X drive
+    σx = ComplexF64[0 1; 1 0]
+    system = QuantumSystem([σx], [1.0])
+    
+    # Pulse that swaps |0⟩ ↔ |1⟩
+    T = π / 2
+    times = [0.0, T]
+    controls = ones(1, 2)
+    pulse = ZeroOrderPulse(controls, times)
+    
+    initials = [ComplexF64[1.0, 0.0], ComplexF64[0.0, 1.0]]
+    goals = [ComplexF64[0.0, 1.0], ComplexF64[1.0, 0.0]]
+    
+    qtraj = EnsembleKetTrajectory(system, pulse, initials, goals)
+    
+    # Both transfers should have high fidelity
+    fid = fidelity(qtraj)
+    @test fid > 0.99
+end
+
+@testitem "EnsembleKetTrajectory state_names" begin
+    using LinearAlgebra
+    
+    system = QuantumSystem([PAULIS.X], [1.0])
+    
+    initials = [ComplexF64[1.0, 0.0], ComplexF64[0.0, 1.0], ComplexF64[1.0, 1.0]/√2]
+    goals = [ComplexF64[0.0, 1.0], ComplexF64[1.0, 0.0], ComplexF64[1.0, -1.0]/√2]
+    
+    qtraj = EnsembleKetTrajectory(system, initials, goals, 1.0)
+    
+    @test state_name(qtraj) == :ψ̃
+    @test state_names(qtraj) == [:ψ̃1, :ψ̃2, :ψ̃3]
+end

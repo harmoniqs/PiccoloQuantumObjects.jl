@@ -14,7 +14,6 @@ export IonChainMSSystem
         lab_frame::Bool=false,
         frame_ω::Float64=lab_frame ? 0.0 : (ωq isa Vector ? ωq[1] : ωq),
         multiply_by_2π::Bool=true,
-        T_max::Float64=10.0,
         drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=fill(1.0, 2*N_ions),
     ) -> QuantumSystem
 
@@ -60,7 +59,6 @@ where:
 - `lab_frame`: If true, use lab frame Hamiltonian. If false, use rotating frame.
 - `frame_ω`: Rotating frame frequency in GHz. Defaults to first ion frequency.
 - `multiply_by_2π`: Whether to multiply Hamiltonian by 2π (default true, since frequencies are in GHz).
-- `T_max`: Maximum evolution time.
 - `drive_bounds`: Control bounds. Vector of length `2*N_ions` for [Ωx₁, Ωy₁, Ωx₂, Ωy₂, ...].
 
 # Example
@@ -93,7 +91,6 @@ function IonChainSystem(;
     lab_frame::Bool=false,
     frame_ω::Float64=lab_frame ? 0.0 : (ωq isa Vector ? ωq[1] : ωq),
     multiply_by_2π::Bool=true,
-    T_max::Float64=10.0,
     drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=fill(1.0, 2*N_ions),
 )
     # Convert scalar parameters to vectors
@@ -178,7 +175,6 @@ function IonChainSystem(;
     return QuantumSystem(
         H_drift,
         H_drives,
-        T_max,
         drive_bounds
     )
 end
@@ -268,7 +264,6 @@ end
         ωm::Union{Float64, Vector{Float64}}=0.1,
         δ::Union{Float64, Vector{Float64}}=0.0,
         multiply_by_2π::Bool=true,
-        T_max::Float64=10.0,
         drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=fill(1.0, N_ions),
     ) -> QuantumSystem
 
@@ -318,7 +313,6 @@ This directly creates entanglement between ions without needing to individually 
 - `ωm`: Motional frequencies (scalar or vector)
 - `δ`: Detuning from sideband (scalar or vector per mode). Typical: δ ~ 0.1 × ωm
 - `multiply_by_2π`: Multiply by 2π (default true)
-- `T_max`: Maximum time
 - `drive_bounds`: Control bounds (length N_ions for individual ion addressing)
 
 # Example
@@ -350,7 +344,6 @@ function IonChainMSSystem(;
     ωm::Union{Float64, Vector{Float64}}=0.1,
     δ::Union{Float64, Vector{Float64}}=0.0,
     multiply_by_2π::Bool=true,
-    T_max::Float64=10.0,
     drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=fill(1.0, N_ions),
 )
     # Convert parameters to arrays
@@ -443,7 +436,6 @@ function IonChainMSSystem(;
     
     return QuantumSystem(
         H_time_dep,
-        T_max,
         drive_bounds;
         time_dependent=true
     )
