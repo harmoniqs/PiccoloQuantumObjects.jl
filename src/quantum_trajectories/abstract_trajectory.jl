@@ -18,7 +18,7 @@ All concrete subtypes should implement:
 abstract type AbstractQuantumTrajectory{P<:AbstractPulse} end
 
 export AbstractQuantumTrajectory
-export UnitaryTrajectory, KetTrajectory, EnsembleKetTrajectory, DensityTrajectory
+export UnitaryTrajectory, KetTrajectory, MultiKetTrajectory, DensityTrajectory
 export SamplingTrajectory
 export state_name, state_names, drive_name, time_name, timestep_name
 export get_system, get_pulse, get_initial, get_goal, get_solution

@@ -8,15 +8,20 @@ Provides interpolated and analytic pulse types:
 - `LinearSplinePulse`: Linear interpolation between samples
 - `CubicSplinePulse`: Cubic spline interpolation
 - `GaussianPulse`: Analytic Gaussian envelope
+- `ErfPulse`: Analytic error function (erf) envelope for phase compensation
+- `MSPhaseCompensationPulse`: Scaled erf pulse [0,1] for MS gate phase compensation (matches IEEE TQE 2024 paper)
+- `CompositePulse`: Combine multiple pulses by interleaving their drives
 
 All pulses are callable: `pulse(t)` returns the control vector at time `t`.
 """
 
 export AbstractPulse, AbstractSplinePulse
-export ZeroOrderPulse, LinearSplinePulse, CubicSplinePulse, GaussianPulse
+export ZeroOrderPulse, LinearSplinePulse, CubicSplinePulse, GaussianPulse, ErfPulse, CompositePulse
 export duration, n_drives, sample, drive_name
 
 using DataInterpolations: ConstantInterpolation, LinearInterpolation, CubicHermiteSpline
+using ForwardDiff
+using SpecialFunctions: erf
 using TestItems
 
 # ============================================================================ #
@@ -97,16 +102,20 @@ the value at the most recent sample point.
 - `duration::Float64`: Total pulse duration
 - `n_drives::Int`: Number of control drives
 - `drive_name::Symbol`: Name of the drive variable (default `:u`)
+- `initial_value::Vector{Float64}`: Initial boundary condition (default: zeros)
+- `final_value::Vector{Float64}`: Final boundary condition (default: zeros)
 """
 struct ZeroOrderPulse{I<:ConstantInterpolation} <: AbstractPulse
     controls::I
     duration::Float64
     n_drives::Int
     drive_name::Symbol
+    initial_value::Vector{Float64}
+    final_value::Vector{Float64}
 end
 
 """
-    ZeroOrderPulse(controls::AbstractMatrix, times::AbstractVector; drive_name=:u)
+    ZeroOrderPulse(controls::AbstractMatrix, times::AbstractVector; drive_name=:u, initial_value=nothing, final_value=nothing)
 
 Create a zero-order hold pulse from control samples and times.
 
@@ -116,11 +125,16 @@ Create a zero-order hold pulse from control samples and times.
 
 # Keyword Arguments
 - `drive_name`: Name of the drive variable (default `:u`)
+- `initial_value`: Initial boundary condition (default: zeros(n_drives))
+- `final_value`: Final boundary condition (default: zeros(n_drives))
 """
-function ZeroOrderPulse(controls::AbstractMatrix, times::AbstractVector; drive_name::Symbol=:u)
+function ZeroOrderPulse(controls::AbstractMatrix, times::AbstractVector; drive_name::Symbol=:u, initial_value::Union{Nothing, Vector{<:Real}}=nothing, final_value::Union{Nothing, Vector{<:Real}}=nothing)
+    n_drives = size(controls, 1)
+    init_val = isnothing(initial_value) ? zeros(n_drives) : Vector{Float64}(initial_value)
+    final_val = isnothing(final_value) ? zeros(n_drives) : Vector{Float64}(final_value)
     # Materialize to Matrix/Vector to ensure consistent type parameters
     interp = ConstantInterpolation(Matrix(controls), collect(times))
-    return ZeroOrderPulse(interp, Float64(times[end]), size(controls, 1), drive_name)
+    return ZeroOrderPulse(interp, Float64(times[end]), n_drives, drive_name, init_val, final_val)
 end
 
 evaluate(p::ZeroOrderPulse, t) = p.controls(t)
@@ -139,16 +153,20 @@ Pulse with linear interpolation between sample points.
 - `duration::Float64`: Total pulse duration
 - `n_drives::Int`: Number of control drives
 - `drive_name::Symbol`: Name of the drive variable (default `:u`)
+- `initial_value::Vector{Float64}`: Initial boundary condition (default: zeros)
+- `final_value::Vector{Float64}`: Final boundary condition (default: zeros)
 """
 struct LinearSplinePulse{I<:LinearInterpolation} <: AbstractSplinePulse
     controls::I
     duration::Float64
     n_drives::Int
     drive_name::Symbol
+    initial_value::Vector{Float64}
+    final_value::Vector{Float64}
 end
 
 """
-    LinearSplinePulse(controls::AbstractMatrix, times::AbstractVector; drive_name=:u)
+    LinearSplinePulse(controls::AbstractMatrix, times::AbstractVector; drive_name=:u, initial_value=nothing, final_value=nothing)
 
 Create a linearly interpolated pulse from control samples and times.
 
@@ -158,11 +176,16 @@ Create a linearly interpolated pulse from control samples and times.
 
 # Keyword Arguments
 - `drive_name`: Name of the drive variable (default `:u`)
+- `initial_value`: Initial boundary condition (default: zeros(n_drives))
+- `final_value`: Final boundary condition (default: zeros(n_drives))
 """
-function LinearSplinePulse(controls::AbstractMatrix, times::AbstractVector; drive_name::Symbol=:u)
+function LinearSplinePulse(controls::AbstractMatrix, times::AbstractVector; drive_name::Symbol=:u, initial_value::Union{Nothing, Vector{<:Real}}=nothing, final_value::Union{Nothing, Vector{<:Real}}=nothing)
+    n_drives = size(controls, 1)
+    init_val = isnothing(initial_value) ? zeros(n_drives) : Vector{Float64}(initial_value)
+    final_val = isnothing(final_value) ? zeros(n_drives) : Vector{Float64}(final_value)
     # Materialize to Matrix/Vector to ensure consistent type parameters
     interp = LinearInterpolation(Matrix(controls), collect(times))
-    return LinearSplinePulse(interp, Float64(times[end]), size(controls, 1), drive_name)
+    return LinearSplinePulse(interp, Float64(times[end]), n_drives, drive_name, init_val, final_val)
 end
 
 evaluate(p::LinearSplinePulse, t) = p.controls(t)
@@ -182,16 +205,20 @@ derivatives for exact reconstruction after optimization.
 - `duration::Float64`: Total pulse duration
 - `n_drives::Int`: Number of control drives
 - `drive_name::Symbol`: Name of the drive variable (default `:u`)
+- `initial_value::Vector{Float64}`: Initial boundary condition (default: zeros)
+- `final_value::Vector{Float64}`: Final boundary condition (default: zeros)
 """
 struct CubicSplinePulse{I<:CubicHermiteSpline} <: AbstractSplinePulse
     controls::I
     duration::Float64
     n_drives::Int
     drive_name::Symbol
+    initial_value::Vector{Float64}
+    final_value::Vector{Float64}
 end
 
 """
-    CubicSplinePulse(controls::AbstractMatrix, derivatives::AbstractMatrix, times::AbstractVector; drive_name=:u)
+    CubicSplinePulse(controls::AbstractMatrix, derivatives::AbstractMatrix, times::AbstractVector; drive_name=:u, initial_value=nothing, final_value=nothing)
 
 Create a cubic Hermite spline pulse from control values, derivatives, and times.
 
@@ -202,15 +229,20 @@ Create a cubic Hermite spline pulse from control values, derivatives, and times.
 
 # Keyword Arguments
 - `drive_name`: Name of the drive variable (default `:u`)
+- `initial_value`: Initial boundary condition (default: zeros(n_drives))
+- `final_value`: Final boundary condition (default: zeros(n_drives))
 """
-function CubicSplinePulse(controls::AbstractMatrix, derivatives::AbstractMatrix, times::AbstractVector; drive_name::Symbol=:u)
+function CubicSplinePulse(controls::AbstractMatrix, derivatives::AbstractMatrix, times::AbstractVector; drive_name::Symbol=:u, initial_value::Union{Nothing, Vector{<:Real}}=nothing, final_value::Union{Nothing, Vector{<:Real}}=nothing)
+    n_drives = size(controls, 1)
+    init_val = isnothing(initial_value) ? zeros(n_drives) : Vector{Float64}(initial_value)
+    final_val = isnothing(final_value) ? zeros(n_drives) : Vector{Float64}(final_value)
     # Materialize to Matrix to ensure consistent type parameters across construction methods
     interp = CubicHermiteSpline(Matrix(derivatives), Matrix(controls), collect(times))
-    return CubicSplinePulse(interp, Float64(times[end]), size(controls, 1), drive_name)
+    return CubicSplinePulse(interp, Float64(times[end]), n_drives, drive_name, init_val, final_val)
 end
 
 """
-    CubicSplinePulse(controls::AbstractMatrix, times::AbstractVector; drive_name=:u)
+    CubicSplinePulse(controls::AbstractMatrix, times::AbstractVector; drive_name=:u, initial_value=nothing, final_value=nothing)
 
 Create a cubic Hermite spline pulse with zero derivatives at all knot points.
 Useful for initial guesses where smoothness constraints will be enforced by optimizer.
@@ -221,13 +253,121 @@ Useful for initial guesses where smoothness constraints will be enforced by opti
 
 # Keyword Arguments
 - `drive_name`: Name of the drive variable (default `:u`)
+- `initial_value`: Initial boundary condition (default: zeros(n_drives))
+- `final_value`: Final boundary condition (default: zeros(n_drives))
 """
-function CubicSplinePulse(controls::AbstractMatrix, times::AbstractVector; drive_name::Symbol=:u)
+function CubicSplinePulse(controls::AbstractMatrix, times::AbstractVector; drive_name::Symbol=:u, initial_value::Union{Nothing, Vector{<:Real}}=nothing, final_value::Union{Nothing, Vector{<:Real}}=nothing)
     derivatives = zeros(size(controls))
-    return CubicSplinePulse(controls, derivatives, times; drive_name)
+    return CubicSplinePulse(controls, derivatives, times; drive_name, initial_value, final_value)
 end
 
 evaluate(p::CubicSplinePulse, t) = p.controls(t)
+
+# ============================================================================ #
+# Conversion methods (analytic → spline pulses)
+# ============================================================================ #
+
+"""
+    LinearSplinePulse(pulse::AbstractPulse, n_samples::Int; kwargs...)
+    LinearSplinePulse(pulse::AbstractPulse, times::AbstractVector; kwargs...)
+
+Convert any pulse to a LinearSplinePulse by sampling at specified times.
+
+Useful for initializing optimization problems with analytic pulse shapes.
+
+# Arguments
+- `pulse`: Source pulse (GaussianPulse, ErfPulse, CompositePulse, etc.)
+- `n_samples`: Number of uniformly spaced samples (alternative to `times`)
+- `times`: Specific sample times (alternative to `n_samples`)
+
+# Keyword Arguments
+- `drive_name`: Name for the drive variable (default: `:u`)
+- `initial_value`: Initial boundary condition (default: pulse(0.0))
+- `final_value`: Final boundary condition (default: pulse(duration))
+
+# Example
+```julia
+gaussian = GaussianPulse([1.0, 2.0], 0.1, 1.0)
+linear = LinearSplinePulse(gaussian, 50)  # 50 samples
+```
+"""
+function LinearSplinePulse(
+    pulse::AbstractPulse,
+    n_samples::Int;
+    drive_name::Symbol=:u,
+    initial_value::Union{Nothing, Vector{<:Real}}=nothing,
+    final_value::Union{Nothing, Vector{<:Real}}=nothing
+)
+    times = collect(range(0.0, duration(pulse), length=n_samples))
+    return LinearSplinePulse(pulse, times; drive_name, initial_value, final_value)
+end
+
+function LinearSplinePulse(
+    pulse::AbstractPulse,
+    times::AbstractVector;
+    drive_name::Symbol=:u,
+    initial_value::Union{Nothing, Vector{<:Real}}=nothing,
+    final_value::Union{Nothing, Vector{<:Real}}=nothing
+)
+    controls = sample(pulse, times)
+    init_val = isnothing(initial_value) ? pulse(times[1]) : initial_value
+    final_val = isnothing(final_value) ? pulse(times[end]) : final_value
+    return LinearSplinePulse(controls, times; drive_name, initial_value=init_val, final_value=final_val)
+end
+
+"""
+    CubicSplinePulse(pulse::AbstractPulse, n_samples::Int; kwargs...)
+    CubicSplinePulse(pulse::AbstractPulse, times::AbstractVector; kwargs...)
+
+Convert any pulse to a CubicSplinePulse by sampling at specified times.
+Derivatives are computed using ForwardDiff for automatic differentiation.
+
+Useful for initializing optimization problems with smooth analytic pulse shapes.
+
+# Arguments
+- `pulse`: Source pulse (GaussianPulse, ErfPulse, CompositePulse, etc.)
+- `n_samples`: Number of uniformly spaced samples (alternative to `times`)
+- `times`: Specific sample times (alternative to `n_samples`)
+
+# Keyword Arguments
+- `drive_name`: Name for the drive variable (default: `:du`)
+- `initial_value`: Initial boundary condition (default: pulse(0.0))
+- `final_value`: Final boundary condition (default: pulse(duration))
+
+# Example
+```julia
+gaussian = GaussianPulse([1.0, 2.0], 0.1, 1.0)
+cubic = CubicSplinePulse(gaussian, 50)  # 50 samples with ForwardDiff derivatives
+```
+"""
+function CubicSplinePulse(
+    pulse::AbstractPulse,
+    n_samples::Int;
+    drive_name::Symbol=:du,
+    initial_value::Union{Nothing, Vector{<:Real}}=nothing,
+    final_value::Union{Nothing, Vector{<:Real}}=nothing
+)
+    times = collect(range(0.0, duration(pulse), length=n_samples))
+    return CubicSplinePulse(pulse, times; drive_name, initial_value, final_value)
+end
+
+function CubicSplinePulse(
+    pulse::AbstractPulse,
+    times::AbstractVector;
+    drive_name::Symbol=:du,
+    initial_value::Union{Nothing, Vector{<:Real}}=nothing,
+    final_value::Union{Nothing, Vector{<:Real}}=nothing
+)
+    controls = sample(pulse, times)
+    
+    # Compute derivatives using ForwardDiff
+    derivatives = hcat([ForwardDiff.derivative(pulse, t) for t in times]...)
+    
+    init_val = isnothing(initial_value) ? pulse(times[1]) : initial_value
+    final_val = isnothing(final_value) ? pulse(times[end]) : final_value
+    
+    return CubicSplinePulse(controls, derivatives, times; drive_name, initial_value=init_val, final_value=final_val)
+end
 
 # ============================================================================ #
 # GaussianPulse (analytic)
@@ -316,6 +456,247 @@ function GaussianPulse(
 end
 
 evaluate(p::GaussianPulse, t) = p.f(t)
+
+# ============================================================================ #
+# ErfPulse (analytic error function)
+# ============================================================================ #
+
+"""
+    ErfPulse{F<:Function} <: AbstractPulse
+
+Analytic error function pulse for phase compensation in trapped ion gates.
+
+The error function profile is commonly used to compensate AC Stark shifts in 
+Mølmer-Sørensen gates, where φ(t) ∝ erf(√2 (t - t₀)/σ) cancels time-varying
+phases from off-resonant spectator modes.
+
+    u_i(t) = amplitudes[i] * erf(√2 * (t - centers[i]) / sigmas[i])
+
+Typically scaled to range [0, 1] or [-1, 1] by adjusting amplitude.
+
+# Fields
+- `f::F`: Function that evaluates the pulse
+- `amplitudes::Vector{Float64}`: Peak amplitude for each drive
+- `sigmas::Vector{Float64}`: Width parameter for each drive
+- `centers::Vector{Float64}`: Center time for each drive
+- `duration::Float64`: Total pulse duration
+- `n_drives::Int`: Number of control drives
+
+# References
+- Mizrahi et al., "Realization and Calibration of Continuously Parameterized 
+  Two-Qubit Gates...", IEEE TQE (2024), Figure 7b
+"""
+struct ErfPulse{F<:Function} <: AbstractPulse
+    f::F
+    amplitudes::Vector{Float64}
+    sigmas::Vector{Float64}
+    centers::Vector{Float64}
+    duration::Float64
+    n_drives::Int
+end
+
+"""
+    ErfPulse(amplitudes, sigmas, centers, duration)
+
+Create an error function pulse with per-drive parameters.
+
+# Arguments
+- `amplitudes`: Peak amplitude for each drive
+- `sigmas`: Width parameter for each drive (controls steepness)
+- `centers`: Center time for each drive (inflection point)
+- `duration`: Total pulse duration
+
+# Example
+```julia
+using SpecialFunctions: erf
+
+# Phase compensation for MS gate
+φ_max = π/4  # Maximum phase shift
+T = 50.0     # Gate duration
+σ = T/4      # Width parameter
+
+pulse = ErfPulse([φ_max], [σ], [T/2], T)
+```
+"""
+function ErfPulse(
+    amplitudes::AbstractVector{<:Real},
+    sigmas::AbstractVector{<:Real},
+    centers::AbstractVector{<:Real},
+    duration::Real
+)
+    n = length(amplitudes)
+    @assert length(sigmas) == n "sigmas must have same length as amplitudes"
+    @assert length(centers) == n "centers must have same length as amplitudes"
+    
+    amps = Vector{Float64}(amplitudes)
+    sigs = Vector{Float64}(sigmas)
+    ctrs = Vector{Float64}(centers)
+    dur = Float64(duration)
+    
+    f = t -> [amps[i] * erf(√2 * (t - ctrs[i]) / sigs[i]) for i in 1:n]
+    return ErfPulse(f, amps, sigs, ctrs, dur, n)
+end
+
+"""
+    ErfPulse(amplitudes, sigma, duration; center=duration/2)
+
+Create an error function pulse with shared sigma and center across all drives.
+
+# Arguments
+- `amplitudes`: Peak amplitude for each drive
+- `sigma`: Shared width parameter for all drives
+- `duration`: Total pulse duration
+
+# Keyword Arguments
+- `center`: Shared center time (default: `duration/2`)
+"""
+function ErfPulse(
+    amplitudes::AbstractVector{<:Real},
+    sigma::Real,
+    duration::Real;
+    center::Real=duration/2
+)
+    n = length(amplitudes)
+    return ErfPulse(
+        amplitudes, 
+        fill(Float64(sigma), n), 
+        fill(Float64(center), n), 
+        duration
+    )
+end
+
+evaluate(p::ErfPulse, t) = p.f(t)
+
+# ============================================================================ #
+# CompositePulse (combine multiple pulses)
+# ============================================================================ #
+
+"""
+    CompositePulse{F<:Function} <: AbstractPulse
+
+Composite pulse that combines multiple pulse objects by interleaving their drives.
+
+Useful for creating pulses with different shapes for different control types,
+such as Gaussian amplitude + erf phase for trapped ion gates.
+
+# Fields
+- `f::F`: Function that evaluates the composite pulse
+- `pulses::Vector{<:AbstractPulse}`: Component pulses
+- `drive_mapping::Vector{Vector{Int}}`: Maps pulse i, drive j to composite drive index
+- `duration::Float64`: Total pulse duration (must match for all components)
+- `n_drives::Int`: Total number of drives across all pulses
+
+# Example
+```julia
+# Amplitude: Gaussian (2 drives for 2 ions)
+Ω_pulse = GaussianPulse([Ω_max, Ω_max], σ, T)
+
+# Phase: Error function (2 drives for 2 ions)
+φ_pulse = ErfPulse([φ_max, φ_max], σ, T)
+
+# Composite: [Ω₁, φ₁, Ω₂, φ₂] - interleaved
+pulse = CompositePulse([Ω_pulse, φ_pulse], :interleave)
+```
+"""
+struct CompositePulse{F<:Function} <: AbstractPulse
+    f::F
+    pulses::Vector{<:AbstractPulse}
+    drive_mapping::Vector{Vector{Int}}
+    duration::Float64
+    n_drives::Int
+end
+
+"""
+    CompositePulse(pulses::Vector{<:AbstractPulse}, mode::Symbol=:interleave)
+
+Create a composite pulse from multiple component pulses.
+
+# Arguments
+- `pulses`: Vector of pulse objects to combine
+- `mode`: How to combine the drives
+  - `:interleave` - Interleave drives: [p1_d1, p2_d1, p1_d2, p2_d2, ...]
+  - `:concatenate` - Concatenate drives: [p1_d1, p1_d2, ..., p2_d1, p2_d2, ...]
+
+# Example
+```julia
+# For MS gate with 2 ions: [Ω₁, φ₁, Ω₂, φ₂]
+Ω_pulse = GaussianPulse([Ω₁, Ω₂], σ, T)  # 2 drives
+φ_pulse = ErfPulse([φ₁, φ₂], σ, T)        # 2 drives
+pulse = CompositePulse([Ω_pulse, φ_pulse], :interleave)
+# Result: pulse(t) = [Ω₁(t), φ₁(t), Ω₂(t), φ₂(t)]
+```
+"""
+function CompositePulse(
+    pulses::Vector{<:AbstractPulse},
+    mode::Symbol=:interleave
+)
+    @assert !isempty(pulses) "Must provide at least one pulse"
+    @assert mode in [:interleave, :concatenate] "mode must be :interleave or :concatenate"
+    
+    # Check all pulses have same duration
+    dur = duration(pulses[1])
+    for p in pulses
+        @assert abs(duration(p) - dur) < 1e-10 "All pulses must have same duration"
+    end
+    
+    # Build drive mapping based on mode
+    n_pulses = length(pulses)
+    n_drives_per_pulse = [n_drives(p) for p in pulses]
+    total_drives = sum(n_drives_per_pulse)
+    
+    drive_mapping = [Vector{Int}() for _ in 1:n_pulses]
+    
+    if mode == :interleave
+        # Check all pulses have same number of drives for interleaving
+        @assert allequal(n_drives_per_pulse) "All pulses must have same n_drives for :interleave mode"
+        
+        n_per_pulse = n_drives_per_pulse[1]
+        composite_idx = 1
+        
+        # Interleave: [p1_d1, p2_d1, ..., pN_d1, p1_d2, p2_d2, ..., pN_d2, ...]
+        for drive_idx in 1:n_per_pulse
+            for pulse_idx in 1:n_pulses
+                push!(drive_mapping[pulse_idx], composite_idx)
+                composite_idx += 1
+            end
+        end
+    else  # :concatenate
+        # Concatenate: [p1_d1, p1_d2, ..., p2_d1, p2_d2, ...]
+        composite_idx = 1
+        for pulse_idx in 1:n_pulses
+            for _ in 1:n_drives_per_pulse[pulse_idx]
+                push!(drive_mapping[pulse_idx], composite_idx)
+                composite_idx += 1
+            end
+        end
+    end
+    
+    # Create evaluation function (type-generic for ForwardDiff compatibility)
+    f = function(t)
+        # Get first pulse values to determine element type
+        first_vals = pulses[1](t)
+        T = eltype(first_vals)
+        result = zeros(T, total_drives)
+        
+        # Fill in values from first pulse
+        for (local_idx, composite_idx) in enumerate(drive_mapping[1])
+            result[composite_idx] = first_vals[local_idx]
+        end
+        
+        # Fill in values from remaining pulses
+        for pulse_idx in 2:n_pulses
+            pulse_vals = pulses[pulse_idx](t)
+            for (local_idx, composite_idx) in enumerate(drive_mapping[pulse_idx])
+                result[composite_idx] = pulse_vals[local_idx]
+            end
+        end
+        return result
+    end
+    
+    return CompositePulse(f, pulses, drive_mapping, dur, total_drives)
+end
+
+evaluate(p::CompositePulse, t) = p.f(t)
 
 # ============================================================================ #
 # NamedTrajectory Constructors
@@ -508,6 +889,175 @@ end
     @test pulse3(0.3)[1] ≈ 1.0  # Peak at specified center
 end
 
+@testitem "ErfPulse" begin
+    using PiccoloQuantumObjects: ErfPulse, duration, n_drives
+    using SpecialFunctions: erf
+    
+    # Test with per-drive parameters
+    amplitudes = [1.0, 2.0]
+    sigmas = [0.2, 0.3]
+    centers = [0.5, 0.6]
+    dur = 1.0
+    
+    pulse = ErfPulse(amplitudes, sigmas, centers, dur)
+    
+    @test duration(pulse) == 1.0
+    @test n_drives(pulse) == 2
+    @test pulse.amplitudes == amplitudes
+    @test pulse.sigmas == sigmas
+    @test pulse.centers == centers
+    
+    # Test that center is inflection point (erf(0) = 0)
+    @test pulse(0.5)[1] ≈ 0.0  # First drive at center
+    @test pulse(0.6)[2] ≈ 0.0  # Second drive at center
+    
+    # Test asymptotic behavior
+    @test pulse(0.0)[1] < -0.9 * amplitudes[1]  # Near -1 far before center
+    @test pulse(1.0)[1] > 0.9 * amplitudes[1]   # Near +1 far after center
+    
+    # Test monotonic increase
+    @test pulse(0.4)[1] < pulse(0.5)[1]
+    @test pulse(0.5)[1] < pulse(0.6)[1]
+    
+    # Test convenience constructor with shared parameters
+    pulse2 = ErfPulse([1.0, 2.0], 0.2, 1.0)
+    @test duration(pulse2) == 1.0
+    @test n_drives(pulse2) == 2
+    @test pulse2.centers == [0.5, 0.5]  # Default center is duration/2
+    @test pulse2.sigmas == [0.2, 0.2]
+    
+    # Test with custom center
+    pulse3 = ErfPulse([1.0], 0.2, 1.0; center=0.3)
+    @test pulse3.centers == [0.3]
+    @test pulse3(0.3)[1] ≈ 0.0  # Zero at center
+    
+    # Test phase compensation use case
+    φ_max = π/4
+    T = 50.0
+    σ = T/4
+    phase_pulse = ErfPulse([φ_max], [σ], [T/2], T)
+    @test phase_pulse(T/2)[1] ≈ 0.0
+    @test phase_pulse(0.0)[1] < -0.8 * φ_max
+    @test phase_pulse(T)[1] > 0.8 * φ_max
+end
+
+@testitem "CompositePulse" begin
+    using PiccoloQuantumObjects: CompositePulse, GaussianPulse, ErfPulse, duration, n_drives
+    
+    # Create component pulses
+    T = 10.0
+    amp_pulse = GaussianPulse([1.0, 2.0], 1.0, T)     # 2 drives
+    phase_pulse = ErfPulse([0.5, 0.8], 1.0, T)        # 2 drives
+    
+    # Test interleave mode (default)
+    composite = CompositePulse([amp_pulse, phase_pulse], :interleave)
+    
+    @test duration(composite) == T
+    @test n_drives(composite) == 4  # 2 + 2
+    
+    # Test evaluation at center (t=5.0)
+    # Gaussian peaks at center, erf is zero at center
+    vals = composite(5.0)
+    @test length(vals) == 4
+    
+    # Interleaved order: [amp_d1, phase_d1, amp_d2, phase_d2]
+    @test vals[1] ≈ amp_pulse(5.0)[1]      # Amplitude drive 1
+    @test vals[2] ≈ phase_pulse(5.0)[1]    # Phase drive 1
+    @test vals[3] ≈ amp_pulse(5.0)[2]      # Amplitude drive 2
+    @test vals[4] ≈ phase_pulse(5.0)[2]    # Phase drive 2
+    
+    @test vals[1] ≈ 1.0  # Gaussian peak
+    @test vals[2] ≈ 0.0  # Erf zero
+    @test vals[3] ≈ 2.0  # Gaussian peak
+    @test vals[4] ≈ 0.0  # Erf zero
+    
+    # Test concatenate mode
+    composite2 = CompositePulse([amp_pulse, phase_pulse], :concatenate)
+    @test n_drives(composite2) == 4
+    
+    vals2 = composite2(5.0)
+    # Concatenated order: [amp_d1, amp_d2, phase_d1, phase_d2]
+    @test vals2[1] ≈ amp_pulse(5.0)[1]
+    @test vals2[2] ≈ amp_pulse(5.0)[2]
+    @test vals2[3] ≈ phase_pulse(5.0)[1]
+    @test vals2[4] ≈ phase_pulse(5.0)[2]
+    
+    # Test with different n_drives (concatenate only)
+    pulse_3drive = GaussianPulse([1.0, 2.0, 3.0], 1.0, T)
+    pulse_2drive = ErfPulse([0.5, 0.8], 1.0, T)
+    composite3 = CompositePulse([pulse_3drive, pulse_2drive], :concatenate)
+    
+    @test n_drives(composite3) == 5  # 3 + 2
+    vals3 = composite3(5.0)
+    @test length(vals3) == 5
+    @test vals3[1:3] ≈ pulse_3drive(5.0)
+    @test vals3[4:5] ≈ pulse_2drive(5.0)
+    
+    # Test that interleave with different n_drives fails
+    @test_throws AssertionError CompositePulse([pulse_3drive, pulse_2drive], :interleave)
+end
+
+@testitem "Pulse conversion to splines" begin
+    using PiccoloQuantumObjects: GaussianPulse, ErfPulse, CompositePulse, LinearSplinePulse, CubicSplinePulse
+    using PiccoloQuantumObjects: duration, n_drives
+    
+    # Create analytic pulses
+    T = 10.0
+    gaussian = GaussianPulse([1.0, 2.0], 1.0, T)
+    erf_pulse = ErfPulse([0.5, 0.8], 1.0, T)
+    
+    # Test LinearSplinePulse conversion
+    linear = LinearSplinePulse(gaussian, 20)
+    @test linear isa LinearSplinePulse
+    @test duration(linear) == T
+    @test n_drives(linear) == 2
+    
+    # Check that sampled values match original at knot points
+    times = range(0, T, length=20)
+    for t in times
+        @test linear(t) ≈ gaussian(t) atol=1e-10
+    end
+    
+    # Test with custom times
+    custom_times = [0.0, 2.5, 5.0, 7.5, 10.0]
+    linear2 = LinearSplinePulse(gaussian, custom_times)
+    @test duration(linear2) == T
+    for t in custom_times
+        @test linear2(t) ≈ gaussian(t) atol=1e-10
+    end
+    
+    # Test CubicSplinePulse conversion with derivatives
+    cubic = CubicSplinePulse(gaussian, 20)
+    @test cubic isa CubicSplinePulse
+    @test duration(cubic) == T
+    @test n_drives(cubic) == 2
+    
+    # Cubic spline should be very close to original at sample points
+    for t in times
+        @test cubic(t) ≈ gaussian(t) atol=1e-10
+    end
+    
+    # Test with CompositePulse
+    composite = CompositePulse([gaussian, erf_pulse], :interleave)
+    composite_linear = LinearSplinePulse(composite, 30)
+    @test n_drives(composite_linear) == 4  # 2 + 2 interleaved
+    @test duration(composite_linear) == T
+    
+    composite_cubic = CubicSplinePulse(composite, 30)
+    @test n_drives(composite_cubic) == 4
+    @test duration(composite_cubic) == T
+    
+    # Check interleaving is preserved
+    test_times = [0.0, 5.0, 10.0]
+    for t in test_times
+        orig = composite(t)
+        linear_val = composite_linear(t)
+        cubic_val = composite_cubic(t)
+        @test linear_val ≈ orig atol=1e-1
+        @test cubic_val ≈ orig atol=1e-1
+    end
+end
+
 @testitem "Pulse callability" begin
     using PiccoloQuantumObjects: ZeroOrderPulse, LinearSplinePulse, GaussianPulse
     
@@ -564,6 +1114,101 @@ end
     @test n_drives(csp) == 1
     @test csp(0.5) ≈ [1.0] atol=1e-10
     @test csp(0.0) ≈ [0.0] atol=1e-10
+end
+
+@testitem "Pulse Boundary Conditions" begin
+    using LinearAlgebra
+    
+    # Test ZeroOrderPulse boundary conditions
+    n_drives = 2
+    T = 1.0
+    N = 10
+    controls = rand(n_drives, N)
+    times = range(0, T, length=N)
+    
+    # Default: zeros
+    pulse_default = ZeroOrderPulse(controls, times)
+    @test pulse_default.initial_value == zeros(n_drives)
+    @test pulse_default.final_value == zeros(n_drives)
+    
+    # Custom values
+    init_val = [1.0, 2.0]
+    final_val = [3.0, 4.0]
+    pulse_custom = ZeroOrderPulse(controls, times; initial_value=init_val, final_value=final_val)
+    @test pulse_custom.initial_value == init_val
+    @test pulse_custom.final_value == final_val
+    
+    # Test LinearSplinePulse boundary conditions
+    pulse_linear_default = LinearSplinePulse(controls, times)
+    @test pulse_linear_default.initial_value == zeros(n_drives)
+    @test pulse_linear_default.final_value == zeros(n_drives)
+    
+    pulse_linear_custom = LinearSplinePulse(controls, times; initial_value=init_val, final_value=final_val)
+    @test pulse_linear_custom.initial_value == init_val
+    @test pulse_linear_custom.final_value == final_val
+    
+    # Test CubicSplinePulse boundary conditions
+    derivatives = rand(n_drives, N)
+    
+    pulse_cubic_default = CubicSplinePulse(controls, derivatives, times)
+    @test pulse_cubic_default.initial_value == zeros(n_drives)
+    @test pulse_cubic_default.final_value == zeros(n_drives)
+    
+    pulse_cubic_custom = CubicSplinePulse(controls, derivatives, times; initial_value=init_val, final_value=final_val)
+    @test pulse_cubic_custom.initial_value == init_val
+    @test pulse_cubic_custom.final_value == final_val
+    
+    # Test CubicSplinePulse constructor without derivatives
+    pulse_cubic_no_deriv = CubicSplinePulse(controls, times; initial_value=init_val, final_value=final_val)
+    @test pulse_cubic_no_deriv.initial_value == init_val
+    @test pulse_cubic_no_deriv.final_value == final_val
+end
+
+@testitem "NamedTrajectory Boundary Condition Extraction" begin
+    using LinearAlgebra
+    using NamedTrajectories
+    
+    # Create a simple quantum system
+    H_drift = zeros(ComplexF64, 2, 2)
+    H_drives = [ComplexF64[0 1; 1 0]]
+    sys = QuantumSystem(H_drift, H_drives, [(-1.0, 1.0)])
+    
+    # Create a pulse with custom boundary conditions
+    n_drives = 1
+    T = 1.0
+    N = 10
+    controls = rand(n_drives, N)
+    derivatives = rand(n_drives, N)
+    times = range(0, T, length=N)
+    
+    init_val = [0.5]
+    final_val = [-0.5]
+    pulse = CubicSplinePulse(controls, derivatives, times; initial_value=init_val, final_value=final_val)
+    
+    # Create a quantum trajectory and convert to NamedTrajectory
+    U_goal = exp(-im * 0.5 * H_drives[1])
+    qtraj = UnitaryTrajectory(sys, pulse, U_goal)
+    traj = NamedTrajectory(qtraj, N)
+    
+    # Verify boundary conditions are extracted
+    @test haskey(traj.initial, :u)
+    @test haskey(traj.final, :u)
+    @test haskey(traj.initial, :du)
+    @test haskey(traj.final, :du)
+    @test traj.initial[:u] == init_val
+    @test traj.final[:u] == final_val
+    @test traj.initial[:du] == zeros(n_drives)  # Derivatives constrained to zero
+    @test traj.final[:du] == zeros(n_drives)
+    
+    # Test with zero boundaries (default)
+    pulse_zero = CubicSplinePulse(controls, derivatives, times)
+    qtraj_zero = UnitaryTrajectory(sys, pulse_zero, U_goal)
+    traj_zero = NamedTrajectory(qtraj_zero, N)
+    
+    @test traj_zero.initial[:u] == zeros(n_drives)
+    @test traj_zero.final[:u] == zeros(n_drives)
+    @test traj_zero.initial[:du] == zeros(n_drives)
+    @test traj_zero.final[:du] == zeros(n_drives)
 end
 
 end # module Pulses

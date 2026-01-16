@@ -72,8 +72,8 @@ qtraj = UnitaryTrajectory(sys, U_goal, T)
 ψ_goal = ComplexF64[0.0, 1.0]
 qtraj = KetTrajectory(sys, pulse, ψ_init, ψ_goal)
 
-# Ensemble (multiple states, shared controls)
-qtraj = EnsembleKetTrajectory(sys, pulse, [ψ0, ψ1], [ψ1, ψ0])
+# Multi-ket (multiple states, shared controls)
+qtraj = MultiKetTrajectory(sys, pulse, [ψ0, ψ1], [ψ1, ψ0])
 
 # Sample trajectory at any time
 U_at_5 = qtraj(5.0)  # returns unitary/ket at t=5
@@ -81,12 +81,42 @@ U_at_5 = qtraj(5.0)  # returns unitary/ket at t=5
 
 ### 4. Compute Fidelity
 
+**Two Ways to Check Fidelity:**
+
+1. **Fast fidelity (O(1) - recommended for post-optimization):**
 ```julia
-using PiccoloQuantumObjects: fidelity
+qtraj = UnitaryTrajectory(sys, pulse, goal)
+fid = fidelity(qtraj)  # Uses pre-computed ODE solution - INSTANT
+```
 
-# Fidelity of current pulse
-fid = fidelity(qtraj)
+2. **Validate discrete controls with interpolation (O(solve)):**
+```julia
+traj = get_trajectory(qcp)  # Get discrete NamedTrajectory
+fid_linear = rollout_fidelity(traj, sys; interpolation=:linear)
+fid_cubic = rollout_fidelity(traj, sys; interpolation=:cubic)
+```
 
+**When to use each:**
+- Use (1) for normal post-optimization checks - it's instant!
+- Use (2) for validating discrete control performance with different interpolation
+
+**Rolling out new pulses or different ODE parameters:**
+```julia
+# Roll out a new pulse through the system
+pulse_new = ZeroOrderPulse(controls, times)
+qtraj_new = rollout(qtraj, pulse_new)
+
+# Re-solve with different ODE parameters (e.g., compare solvers)
+qtraj_rk = rollout(qtraj; algorithm=Tsit5(), abstol=1e-10)
+qtraj_magnus = rollout(qtraj; algorithm=MagnusGL4())
+
+# In-place versions (mutate qtraj directly)
+rollout!(qtraj, pulse_new)  # Updates qtraj.pulse and qtraj.solution
+rollout!(qtraj; algorithm=Tsit5())  # Updates qtraj.solution only
+```
+
+**Direct fidelity computation:**
+```julia
 # Direct unitary fidelity
 U_final = qtraj(T)
 fid = unitary_fidelity(U_final, U_goal)
@@ -162,7 +192,7 @@ AbstractPulse
 AbstractQuantumTrajectory{P<:AbstractPulse}
 ├── UnitaryTrajectory{P}       # Full unitary evolution, goal is operator
 ├── KetTrajectory{P}           # Single state, goal is ket
-├── EnsembleKetTrajectory{P}   # Multiple states, shared controls
+├── MultiKetTrajectory{P}      # Multiple states, shared controls
 ├── DensityTrajectory{P}       # Density matrix evolution
 └── SamplingTrajectory{P,Q}    # Wraps trajectory for robustness
 ```
@@ -179,7 +209,11 @@ AbstractQuantumTrajectory{P<:AbstractPulse}
 | `state_names(qtraj)` | `Vector{Symbol}` | All state names (ensemble) |
 | `drive_name(qtraj)` | `Symbol` | Control component name |
 | `duration(qtraj)` | `Float64` | Total duration |
-| `fidelity(qtraj)` | `Float64` | Fidelity to goal |
+| `fidelity(qtraj)` | `Float64` | Fidelity to goal (O(1) - uses stored solution) |
+| `rollout(qtraj, pulse; kwargs...)` | `AbstractQuantumTrajectory` | Roll out new pulse through system |
+| `rollout(qtraj; algorithm=..., kwargs...)` | `AbstractQuantumTrajectory` | Re-solve with same pulse, different ODE params |
+| `rollout!(qtraj, pulse; kwargs...)` | `Nothing` | In-place rollout with new pulse |
+| `rollout!(qtraj; algorithm=..., kwargs...)` | `Nothing` | In-place re-solve with ODE params |
 | `qtraj(t)` | state | Sample at time t |
 
 ### Isomorphisms
@@ -203,7 +237,7 @@ Map between complex quantum objects and real vectors for optimization.
 |-----------------|------------|-------------|
 | `UnitaryTrajectory` | `:Ũ⃗` | N/A |
 | `KetTrajectory` | `:ψ̃` | N/A |
-| `EnsembleKetTrajectory` | `:ψ̃` (prefix) | `[:ψ̃1, :ψ̃2, ...]` |
+| `MultiKetTrajectory` | `:ψ̃` (prefix) | `[:ψ̃1, :ψ̃2, ...]` |
 | `DensityTrajectory` | `:ρ⃗̃` | N/A |
 | `SamplingTrajectory` | from base | indexed versions |
 
@@ -252,11 +286,11 @@ src/
 │   ├── abstract_trajectory.jl    # AbstractQuantumTrajectory
 │   ├── unitary_trajectory.jl     # UnitaryTrajectory
 │   ├── ket_trajectory.jl         # KetTrajectory
-│   ├── ensemble_trajectory.jl    # EnsembleKetTrajectory
+│   ├── ensemble_trajectory.jl    # MultiKetTrajectory
 │   ├── density_trajectory.jl     # DensityTrajectory
 │   ├── sampling_trajectory.jl    # SamplingTrajectory
 │   ├── interface.jl              # Common interface methods
-│   ├── rebuild.jl                # Rebuild from optimized trajectory
+│   ├── extract_pulse.jl          # Extract optimized pulse from trajectory
 │   └── named_trajectory_conversion.jl  # NamedTrajectory(qtraj, N)
 ├── quantum_system_templates/
 │   ├── transmons.jl           # TransmonSystem
@@ -282,10 +316,12 @@ end
 ## Recent Changes (Update This!)
 
 ### January 2026
+- **Dual rollout API** - `rollout(qtraj, pulse)` for new pulses, `rollout(qtraj; algorithm=...)` for ODE parameter testing (e.g., comparing Magnus vs RK solvers)
+- **In-place rollout!** - `rollout!(qtraj, ...)` mutates quantum trajectories directly (all trajectory types now mutable structs)
+- **Clarified fidelity APIs** - `fidelity(qtraj)` is O(1) using stored solution (recommended), `rollout_fidelity(traj, sys)` for validating discrete controls
 - Quantum trajectories are parametric: `AbstractQuantumTrajectory{P<:AbstractPulse}`
 - `NamedTrajectory(qtraj, N)` always includes `:t` component
 - Control name is canonically `:u` (configured via `drive_name` kwarg on pulses)
-- `rebuild(qtraj, traj)` reconstructs quantum trajectory from optimized NamedTrajectory
 
 ### Key Patterns
 - All pulses are callable: `pulse(t)` returns control vector
@@ -296,8 +332,9 @@ end
 ## Common Gotchas
 
 1. **Trajectories compute ODE at construction** - Changing the pulse requires creating a new trajectory
-2. **Isomorphism convention** - `[real; imag]` stacking, column-major for operators
-3. **drive_bounds normalization** - Scalars become symmetric bounds: `1.0 → (-1.0, 1.0)`
-4. **time_dependent flag** - Only needed for explicit time dependence like `cos(ωt)` in the Hamiltonian function. The `:t` trajectory component is always present regardless.
-5. **EnsembleKetTrajectory state names** - Uses `:ψ̃1`, `:ψ̃2`, etc., not `:ψ̃` directly
-6. **CubicSplinePulse** - The `:du` component is a true DOF (Hermite tangent), not a derived quantity
+2. **fidelity(qtraj) is O(1), not O(solve)** - It uses the pre-computed solution stored in qtraj. Use `rollout_fidelity(traj, sys)` only for validating discrete controls with different interpolations.
+3. **Isomorphism convention** - `[real; imag]` stacking, column-major for operators
+4. **drive_bounds normalization** - Scalars become symmetric bounds: `1.0 → (-1.0, 1.0)`
+5. **time_dependent flag** - Only needed for explicit time dependence like `cos(ωt)` in the Hamiltonian function. The `:t` trajectory component is always present regardless.
+6. **MultiKetTrajectory state names** - Uses `:ψ̃1`, `:ψ̃2`, etc., not `:ψ̃` directly
+7. **CubicSplinePulse** - The `:du` component is a true DOF (Hermite tangent), not a derived quantity

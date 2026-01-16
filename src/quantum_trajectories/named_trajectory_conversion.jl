@@ -47,21 +47,43 @@ end
 """
     _get_control_data(pulse::Union{ZeroOrderPulse, LinearSplinePulse}, times, sys)
 
-For ZeroOrderPulse and LinearSplinePulse: return `u` data with system bounds.
+For ZeroOrderPulse and LinearSplinePulse: return `u` data with system bounds and boundary conditions.
 Uses the pulse's drive_name to determine variable naming.
+
+# Returns
+- `data`: NamedTuple with control data
+- `control_names`: Tuple of control variable names
+- `bounds`: NamedTuple with control bounds
+- `initial_constraints`: NamedTuple with initial value constraints
+- `final_constraints`: NamedTuple with final value constraints
 """
 function _get_control_data(pulse::Union{ZeroOrderPulse, LinearSplinePulse}, times::AbstractVector, sys::AbstractQuantumSystem)
     u_name = drive_name(pulse)
     u = hcat([pulse(t) for t in times]...)
     u_bounds = _get_drive_bounds(sys)
-    return _named_tuple(u_name => u), (u_name,), _named_tuple(u_name => u_bounds)
+    
+    # Extract boundary conditions from pulse (default zeros if not specified)
+    initial_u = pulse.initial_value
+    final_u = pulse.final_value
+    
+    initial_constraints = _named_tuple(u_name => initial_u)
+    final_constraints = _named_tuple(u_name => final_u)
+    
+    return _named_tuple(u_name => u), (u_name,), _named_tuple(u_name => u_bounds), initial_constraints, final_constraints
 end
 
 """
     _get_control_data(pulse::CubicSplinePulse, times, sys)
 
-For CubicSplinePulse: return `u` and `du` data with system bounds.
+For CubicSplinePulse: return `u` and `du` data with system bounds and boundary conditions.
 Uses the pulse's drive_name to determine variable naming.
+
+# Returns
+- `data`: NamedTuple with control data
+- `control_names`: Tuple of control variable names
+- `bounds`: NamedTuple with control bounds
+- `initial_constraints`: NamedTuple with initial value constraints
+- `final_constraints`: NamedTuple with final value constraints
 """
 function _get_control_data(pulse::CubicSplinePulse, times::AbstractVector, sys::AbstractQuantumSystem)
     u_name = drive_name(pulse)
@@ -84,20 +106,38 @@ function _get_control_data(pulse::CubicSplinePulse, times::AbstractVector, sys::
     # du bounds are typically unbounded (controlled by regularization)
     du_bounds = (-Inf * ones(n), Inf * ones(n))
     
-    return _named_tuple(u_name => u, du_name => du), (u_name, du_name), _named_tuple(u_name => u_bounds, du_name => du_bounds)
+    # Extract boundary conditions from pulse (default zeros if not specified)
+    initial_u = pulse.initial_value
+    final_u = pulse.final_value
+    # For spline pulses, also constrain derivatives to zero at boundaries
+    initial_du = zeros(n)
+    final_du = zeros(n)
+    
+    initial_constraints = _named_tuple(u_name => initial_u, du_name => initial_du)
+    final_constraints = _named_tuple(u_name => final_u, du_name => final_du)
+    
+    return _named_tuple(u_name => u, du_name => du), (u_name, du_name), _named_tuple(u_name => u_bounds, du_name => du_bounds), initial_constraints, final_constraints
 end
 
 """
     _get_control_data(pulse::GaussianPulse, times, sys)
 
-For GaussianPulse: sample as u values with system bounds.
+For GaussianPulse: sample as u values with system bounds and boundary conditions.
 Uses the pulse's drive_name to determine variable naming.
+
+# Returns
+- `data`: NamedTuple with control data
+- `control_names`: Tuple of control variable names
+- `bounds`: NamedTuple with control bounds
+- `initial_constraints`: NamedTuple with initial value constraints (empty for parametric pulses)
+- `final_constraints`: NamedTuple with final value constraints (empty for parametric pulses)
 """
 function _get_control_data(pulse::GaussianPulse, times::AbstractVector, sys::AbstractQuantumSystem)
     u_name = drive_name(pulse)
     u = hcat([pulse(t) for t in times]...)
     u_bounds = _get_drive_bounds(sys)
-    return _named_tuple(u_name => u), (u_name,), _named_tuple(u_name => u_bounds)
+    # GaussianPulse is parametric, no boundary conditions enforced
+    return _named_tuple(u_name => u), (u_name,), _named_tuple(u_name => u_bounds), NamedTuple(), NamedTuple()
 end
 
 # ============================================================================ #
@@ -145,7 +185,7 @@ function NamedTrajectory(
     Ũ⃗ = hcat([operator_to_iso_vec(U) for U in states]...)
     
     # Get control data based on pulse type
-    control_data, control_names, control_bounds = _get_control_data(qtraj.pulse, times, qtraj.system)
+    control_data, control_names, control_bounds, control_initial, control_final = _get_control_data(qtraj.pulse, times, qtraj.system)
     
     # State dimension
     state_dim = size(Ũ⃗, 1)
@@ -160,10 +200,11 @@ function NamedTrajectory(
         control_data
     )
     
-    # Initial and final conditions
-    initial = _named_tuple(s_name => operator_to_iso_vec(qtraj.initial))
+    # Initial and final conditions (merge state and control boundaries)
+    initial = merge(_named_tuple(s_name => operator_to_iso_vec(qtraj.initial)), control_initial)
+    final_nt = merge(control_final)  # Control boundaries go to final (hard constraints)
     U_goal = qtraj.goal isa EmbeddedOperator ? qtraj.goal.operator : qtraj.goal
-    goal_nt = _named_tuple(s_name => operator_to_iso_vec(U_goal))
+    goal_nt = _named_tuple(s_name => operator_to_iso_vec(U_goal))  # State goal (soft constraint)
     
     # Bounds (state bounded, controls bounded by system, optionally timestep bounded)
     bounds = merge(
@@ -181,6 +222,7 @@ function NamedTrajectory(
         controls=(:Δt, control_names...),
         bounds=bounds,
         initial=initial,
+        final=final_nt,
         goal=goal_nt
     )
 end
@@ -215,7 +257,7 @@ function NamedTrajectory(
     ψ̃ = hcat([ket_to_iso(ψ) for ψ in states]...)
     
     # Get control data based on pulse type
-    control_data, control_names, control_bounds = _get_control_data(qtraj.pulse, times, qtraj.system)
+    control_data, control_names, control_bounds, control_initial, control_final = _get_control_data(qtraj.pulse, times, qtraj.system)
     
     # State dimension
     state_dim = size(ψ̃, 1)
@@ -230,9 +272,10 @@ function NamedTrajectory(
         control_data
     )
     
-    # Initial, goal, bounds
-    initial = _named_tuple(s_name => ket_to_iso(qtraj.initial))
-    goal_nt = _named_tuple(s_name => ket_to_iso(qtraj.goal))
+    # Initial, goal, bounds (merge state and control boundaries)
+    initial = merge(_named_tuple(s_name => ket_to_iso(qtraj.initial)), control_initial)
+    final_nt = merge(control_final)  # Control boundaries go to final (hard constraints)
+    goal_nt = _named_tuple(s_name => ket_to_iso(qtraj.goal))  # State goal (soft constraint)
     bounds = merge(
         _named_tuple(s_name => (-ones(state_dim), ones(state_dim))),
         control_bounds
@@ -248,15 +291,16 @@ function NamedTrajectory(
         controls=(:Δt, control_names...),
         bounds=bounds,
         initial=initial,
+        final=final_nt,
         goal=goal_nt
     )
 end
 
 """
-    NamedTrajectory(qtraj::EnsembleKetTrajectory, N::Int; Δt_bounds=nothing)
-    NamedTrajectory(qtraj::EnsembleKetTrajectory, times::AbstractVector; Δt_bounds=nothing)
+    NamedTrajectory(qtraj::MultiKetTrajectory, N::Int; Δt_bounds=nothing)
+    NamedTrajectory(qtraj::MultiKetTrajectory, times::AbstractVector; Δt_bounds=nothing)
 
-Convert an EnsembleKetTrajectory to a NamedTrajectory for optimization.
+Convert an MultiKetTrajectory to a NamedTrajectory for optimization.
 
 # Stored Variables
 - `ψ̃1`, `ψ̃2`, ...: Isomorphisms of each ket state
@@ -269,7 +313,7 @@ Convert an EnsembleKetTrajectory to a NamedTrajectory for optimization.
   enables free-time optimization (minimum-time problems). Default: `nothing` (no bounds).
 """
 function NamedTrajectory(
-    qtraj::EnsembleKetTrajectory,
+    qtraj::MultiKetTrajectory,
     N_or_times::Union{Int, AbstractVector{<:Real}};
     Δt_bounds::Union{Nothing, Tuple{Float64, Float64}}=nothing
 )
@@ -298,7 +342,12 @@ function NamedTrajectory(
     end
     
     # Get control data
-    control_data, control_names, control_bounds = _get_control_data(qtraj.pulse, times, qtraj.system)
+    control_data, control_names, control_bounds, control_initial, control_final = _get_control_data(qtraj.pulse, times, qtraj.system)
+    
+    # Merge control boundaries with state boundaries
+    initial_nt = merge(initial_nt, control_initial)
+    final_nt = merge(control_final)  # Control boundaries go to final (hard constraints)
+    # goal_nt contains only state goals (soft constraints)
     
     # Compute Δt from times (pad to length T by repeating last value)
     Δt_diff = diff(times)
@@ -318,6 +367,7 @@ function NamedTrajectory(
         controls=(:Δt, control_names...),
         bounds=bounds,
         initial=initial_nt,
+        final=final_nt,
         goal=goal_nt
     )
 end
@@ -498,7 +548,7 @@ end
     @test haskey(traj.components, :ψ̃)
 end
 
-@testitem "EnsembleKetTrajectory" begin
+@testitem "MultiKetTrajectory" begin
     using LinearAlgebra
     using NamedTrajectories
     
@@ -509,7 +559,7 @@ end
     T = 1.0
     initials = [[1.0 + 0im, 0.0], [0.0, 1.0 + 0im]]
     goals = [[0.0, 1.0 + 0im], [1.0 + 0im, 0.0]]
-    qtraj = EnsembleKetTrajectory(system, initials, goals, T)
+    qtraj = MultiKetTrajectory(system, initials, goals, T)
     
     # Test interface
     @test length(qtraj) == 2
@@ -600,7 +650,7 @@ end
     @test !haskey(traj.components, :u)
 end
 
-@testitem "Rebuild trajectory from NamedTrajectory" begin
+@testitem "extract_pulse and rollout trajectory from NamedTrajectory" begin
     using LinearAlgebra
     using NamedTrajectories
     
@@ -619,8 +669,9 @@ end
     # Modify controls
     traj.u .= 0.5 * randn(1, N)
     
-    # Rebuild
-    qtraj2 = rebuild(qtraj, traj)
+    # Extract pulse and rollout
+    pulse = extract_pulse(qtraj, traj)
+    qtraj2 = rollout(qtraj, pulse)
     
     @test qtraj2 isa UnitaryTrajectory
     @test qtraj2.system === system

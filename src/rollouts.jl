@@ -1,25 +1,57 @@
 module Rollouts
 
 """
-Rollouts of quantum systems using SciML's DifferentialEquations.jl. Construct a an `ODEProblem` for your quantum state and call `solve`.
+Rollouts of quantum systems using SciML's DifferentialEquations.jl. 
 
-Provides a domain specific language for quantum system rollouts, with functions
-- KetODEProblem: Ket rollouts
-- UnitaryODEProblem: Unitary rollouts
-- DensityODEProblem: Density matrix rollouts (open systems)
+# Two Ways to Check Fidelity
 
-Includes SciML MatrixOperator versions for linear matrix ODEs (e.g., Magnus expansion),
-- KetOperatorODEProblem
-- UnitaryOperatorODEProblem
+## 1. Fast fidelity from quantum trajectory (O(1) - recommended)
+```julia
+qtraj = UnitaryTrajectory(system, pulse, goal)
+fid = fidelity(qtraj)  # Uses pre-computed ODE solution
+```
+**Use this for:** Post-optimization fidelity checks, analysis
 
-Methods for quick fidelity of zero-order hold controls are available via
-- rollout_fidelity
+## 2. Validate discrete controls with interpolation (O(solve))
+```julia
+traj = get_trajectory(qcp)  # NamedTrajectory with discrete controls
+fid = rollout_fidelity(traj, system; interpolation=:cubic)
+```
+**Use this for:** Testing interpolation methods, validation against discrete trajectory
+
+# Rolling Out New Pulses
+
+```julia
+# Roll out a new pulse through the system (creates new trajectory)
+qtraj_new = rollout(qtraj, new_pulse)
+
+# In-place update after optimization
+pulse = extract_pulse(qtraj, get_trajectory(qcp))
+rollout!(qtraj, pulse)
+```
+
+# Provided Functions
+
+Domain-specific language for quantum system rollouts:
+- `KetODEProblem`: Ket rollouts
+- `UnitaryODEProblem`: Unitary rollouts  
+- `DensityODEProblem`: Density matrix rollouts (open systems)
+
+SciML MatrixOperator versions for Lie group integrators (e.g., Magnus expansion):
+- `KetOperatorODEProblem`
+- `UnitaryOperatorODEProblem`
+
+Fidelity and rollout methods:
+- `fidelity(qtraj)`: Fast lookup from quantum trajectory
+- `rollout(qtraj, pulse; kwargs...)`: Roll out a new pulse
+- `rollout_fidelity(traj, sys; kwargs...)`: Validate discrete NamedTrajectory controls
 
 """
 
 export fidelity
 export unitary_fidelity
 export rollout
+export rollout!
 export rollout_fidelity
 export ket_rollout
 export ket_rollout_fidelity
@@ -45,6 +77,26 @@ using TestItems
 
 using ..Isomorphisms
 using ..QuantumSystems
+
+# ------------------------------------------------------------ #
+# Rollout functions (stubs - extended in quantum_trajectories)
+# ------------------------------------------------------------ #
+
+"""
+    rollout(qtraj, args...; kwargs...)
+
+Roll out a quantum trajectory with new pulse or ODE parameters.
+Extended in quantum_trajectories module for specific trajectory types.
+"""
+function rollout end
+
+"""
+    rollout!(qtraj, args...; kwargs...)
+
+In-place rollout of quantum trajectory with new pulse or ODE parameters.
+Extended in quantum_trajectories module for specific trajectory types.
+"""
+function rollout! end
 
 # ------------------------------------------------------------ #
 # Fidelity
@@ -492,7 +544,7 @@ SII.is_observed(sys::PiccoloRolloutSystem, sym) = false
     using OrdinaryDiffEqTsit5: Tsit5
     
     T, Δt = 1.0, 0.1
-    sys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], [1.0, 1.0])
     ψ0 = ComplexF64[1, 0]
     u = t -> [t; 0.0]
     times = 0:Δt:T
@@ -518,7 +570,7 @@ end
     using OrdinaryDiffEqLinear: MagnusGL4
 
     T, Δt = 1.0, 0.1
-    sys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], [1.0, 1.0])
     u = t -> [t; 0.0]
     times = 0:Δt:T
     rollout = UnitaryOperatorODEProblem(sys, u, times)
@@ -543,7 +595,7 @@ end
     using OrdinaryDiffEqTsit5: Tsit5
 
     T, Δt = 1.0, 0.1
-    csys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
+    csys = QuantumSystem([PAULIS.X, PAULIS.Y], [1.0, 1.0])
     a = ComplexF64[0 1; 0 0]
     sys = OpenQuantumSystem(csys, dissipation_operators=[1e-3 * a])
     u = t -> [t; 0.0]
@@ -574,7 +626,7 @@ end
     using OrdinaryDiffEqLinear: MagnusGL4
 
     T, Δt = 1.0, 0.1
-    sys  = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
+    sys  = QuantumSystem([PAULIS.X, PAULIS.Y], [1.0, 1.0])
     osys = OpenQuantumSystem(sys)
 
     u = t -> [t; 0.0]
@@ -607,7 +659,7 @@ end
     using OrdinaryDiffEqLinear: MagnusGL4
 
     T, Δt = 1.0, 0.1
-    sys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], [1.0, 1.0])
     osys = OpenQuantumSystem(sys)
     times = 0:Δt:T
     n_times = length(times)
@@ -663,7 +715,7 @@ end
 
     T = 1.0
     Δt = 0.1
-    sys = QuantumSystem([PAULIS.X, PAULIS.Y], T, [1.0, 1.0])
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], [1.0, 1.0])
     times = 0:Δt:T
     n_times = length(times)
     ψ0 = ComplexF64[1, 0]
@@ -703,5 +755,72 @@ end
     UT = U_sol.u[end]
     @test ψT ≈ UT * ψ0 atol=1e-2
 end
+
+@testitem "Two ways to check fidelity" begin
+    using SciMLBase: solve
+    using OrdinaryDiffEqLinear: MagnusGL4
+    using NamedTrajectories
+
+    # Setup
+    T = 1.0
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], [1.0, 1.0])
+    X_gate = ComplexF64[0 1; 1 0]
+
+    # Method 1: Fast fidelity from quantum trajectory (O(1))
+    pulse = ZeroOrderPulse([0.5 0.5; 0.1 0.1], [0.0, T])
+    qtraj = UnitaryTrajectory(sys, pulse, X_gate)
+    fid1 = fidelity(qtraj)  # Uses stored solution - FAST!
+    @test fid1 isa Float64
+    @test 0.0 <= fid1 <= 1.0
+
+    # Method 2: Validate discrete controls (for NamedTrajectory)
+    # This is useful when you have discrete trajectory and want to test interpolation
+    I_matrix = ComplexF64[1 0; 0 1]
+    traj = NamedTrajectory(
+        (Ũ⃗ = randn(8, 11), u = randn(2, 11), Δt = fill(T/10, 11));
+        controls = :u,
+        timestep = :Δt,
+        initial = (Ũ⃗ = operator_to_iso_vec(I_matrix),),
+        goal = (Ũ⃗ = operator_to_iso_vec(X_gate),)
+    )
+    
+    # Test different interpolation methods (use unitary_rollout_fidelity for unitaries)
+    fid_constant = unitary_rollout_fidelity(traj, sys; state_name=:Ũ⃗, interpolation=:constant)
+    fid_linear = unitary_rollout_fidelity(traj, sys; state_name=:Ũ⃗, interpolation=:linear)
+    
+    @test fid_constant isa Float64
+    @test fid_linear isa Float64
+    @test 0.0 <= fid_constant <= 1.0
+    @test 0.0 <= fid_linear <= 1.0
+end
+
+@testitem "rollout with new pulse" begin
+    using OrdinaryDiffEqLinear: MagnusGL4
+    
+    # Setup
+    T = 1.0
+    sys = QuantumSystem([PAULIS.X, PAULIS.Y], [1.0, 1.0])
+    X_gate = ComplexF64[0 1; 1 0]
+    
+    # Create initial trajectory
+    pulse1 = ZeroOrderPulse([0.5 0.5; 0.1 0.1], [0.0, T])
+    qtraj1 = UnitaryTrajectory(sys, pulse1, X_gate)
+    fid1 = fidelity(qtraj1)
+    
+    # Roll out a new pulse
+    pulse2 = ZeroOrderPulse([0.8 0.8; 0.2 0.2], [0.0, T])
+    qtraj2 = rollout(qtraj1, pulse2)
+    fid2 = fidelity(qtraj2)
+    
+    # Should have different fidelities (different pulses)
+    @test fid2 != fid1
+    @test qtraj2.pulse === pulse2
+    @test qtraj2.system === qtraj1.system
+    
+    # Roll out with custom resolution
+    qtraj3 = rollout(qtraj1, pulse2; n_points=501)
+    @test length(qtraj3.solution.u) == 501
+end
+
 
 end

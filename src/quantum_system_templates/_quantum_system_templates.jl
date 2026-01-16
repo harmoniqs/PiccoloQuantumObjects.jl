@@ -3,10 +3,22 @@ module QuantumSystemTemplates
 """
 Quantum system templates for common physical systems.
 
-Provides constructors for:
-- **TransmonSystem**: Transmon qubits with anharmonicity
-- **MultiTransmonSystem**: Multi-transmon systems with couplings
-- **RydbergChainSystem**: Rydberg atom chains
+Organized by physical platform:
+
+## Ions
+- **IonChainSystem**: Trapped ion chains with motional modes
+- **MolmerSorensenCoupling**: MS gate coupling helpers
+- **RadialMSGateSystem**: Radial-mode MS gates (IEEE TQE 2024)
+
+## Atoms  
+- **RydbergChainSystem**: Rydberg atom chains with blockade
+
+## Transmons
+- **TransmonSystem**: Single transmon with anharmonicity
+- **MultiTransmonSystem**: Coupled transmon systems
+- **TransmonCavitySystem**: Transmons coupled to cavities
+
+## Cavities
 - **CatSystem**: Quantum cat states in cavities
 """
 
@@ -20,9 +32,17 @@ using ..Gates: GATES
 
 const ⊗ = kron
 
-include("transmons.jl")
-include("rydberg.jl")
-include("cats.jl")
-include("ions.jl")
+# Ion systems
+include("ions/ion_chain.jl")
+include("ions/radial_ms.jl")
+
+# Atom systems
+include("atoms/rydberg_chain.jl")
+
+# Transmon systems
+include("transmons/transmon_system.jl")
+
+# Cavity systems
+include("cavities/cat_system.jl")
 
 end  # module QuantumSystemTemplates

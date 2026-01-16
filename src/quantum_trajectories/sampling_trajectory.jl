@@ -256,38 +256,11 @@ function NamedTrajectory(
 end
 
 # ============================================================================ #
-# SamplingTrajectory Rebuild
-# ============================================================================ #
-
-"""
-    rebuild(sampling::SamplingTrajectory, traj::NamedTrajectory)
-
-Rebuild a SamplingTrajectory from an optimized NamedTrajectory.
-
-Creates a new SamplingTrajectory with updated pulse (controls) from the optimized
-trajectory. The pulse is rebuilt from the control values in `traj`.
-
-# Example
-```julia
-# After optimization
-optimized_sampling = rebuild(sampling, optimized_traj)
-```
-"""
-function rebuild(sampling::SamplingTrajectory, traj::NamedTrajectory)
-    # Rebuild base trajectory first (this updates the pulse)
-    new_base = rebuild(sampling.base_trajectory, traj)
-    
-    # Return new SamplingTrajectory with updated base
-    return SamplingTrajectory(new_base, sampling.systems; weights=sampling.weights)
-end
-
-# ============================================================================ #
 # Tests for SamplingTrajectory
 # ============================================================================ #
 
 @testitem "SamplingTrajectory with UnitaryTrajectory" begin
-    using PiccoloQuantumObjects
-    using PiccoloQuantumObjects: SamplingTrajectory, state_names, get_systems, get_weights
+    include("../../test/test_utils.jl")
     using LinearAlgebra
     using NamedTrajectories: NamedTrajectory
     
@@ -341,8 +314,7 @@ end
 end
 
 @testitem "SamplingTrajectory with KetTrajectory" begin
-    using PiccoloQuantumObjects
-    using PiccoloQuantumObjects: SamplingTrajectory, state_names, get_systems, get_weights
+    include("../../test/test_utils.jl")
     using LinearAlgebra
     using NamedTrajectories: NamedTrajectory
     
@@ -381,9 +353,8 @@ end
     @test :u ∈ traj.names
 end
 
-@testitem "SamplingTrajectory rebuild" begin
-    using PiccoloQuantumObjects
-    using PiccoloQuantumObjects: SamplingTrajectory, state_names, rebuild
+@testitem "SamplingTrajectory extract_pulse and rollout" begin
+    include("../../test/test_utils.jl")
     using LinearAlgebra
     using NamedTrajectories: NamedTrajectory
     
@@ -401,7 +372,7 @@ end
     base_qtraj = UnitaryTrajectory(sys_nom, pulse, GATES[:X])
     sampling = SamplingTrajectory(base_qtraj, [sys_nom, sys_var])
     
-    # Convert to NamedTrajectory, modify, and rebuild
+    # Convert to NamedTrajectory, modify, extract pulse and rollout
     traj = NamedTrajectory(sampling, 11)
     
     # Modify control values
@@ -415,14 +386,60 @@ end
         goal=traj.goal
     )
     
-    # Rebuild
-    new_sampling = rebuild(sampling, new_traj)
+    # Extract pulse and rollout
+    new_pulse = extract_pulse(sampling.base_trajectory, new_traj)
+    new_base_qtraj = rollout(sampling.base_trajectory, new_pulse)
+    new_sampling = SamplingTrajectory(new_base_qtraj, sampling.systems; weights=sampling.weights)
     
     @test new_sampling isa SamplingTrajectory{<:AbstractPulse, <:UnitaryTrajectory}
     @test length(new_sampling) == 2
     @test get_weights(new_sampling) == sampling.weights
     
     # Check pulse was updated
-    new_pulse = get_pulse(new_sampling)
-    @test new_pulse(0.5)[1] ≈ 0.5
+    test_pulse = get_pulse(new_sampling)
+    @test test_pulse(0.5)[1] ≈ 0.5
+end
+@testitem "SamplingTrajectory rollout!" begin
+    include("../../test/test_utils.jl")
+    using LinearAlgebra
+    using NamedTrajectories: NamedTrajectory
+    
+    # Create base system and variations
+    sys_nom = QuantumSystem(PAULIS.Z, [PAULIS.X], [1.0])
+    sys_var = QuantumSystem(0.95 * PAULIS.Z, [PAULIS.X], [1.0])
+    
+    # Create pulse
+    T = 1.0
+    times = range(0, T, length=11)
+    controls = zeros(1, 11)
+    pulse = LinearSplinePulse(controls, collect(times))
+    
+    # Create sampling trajectory
+    base_qtraj = UnitaryTrajectory(sys_nom, pulse, GATES[:X])
+    sampling = SamplingTrajectory(base_qtraj, [sys_nom, sys_var])
+    
+    # Convert to NamedTrajectory, modify controls
+    traj = NamedTrajectory(sampling, 11)
+    new_u = fill(0.5, size(traj.u))
+    new_traj = NamedTrajectory(
+        (; Ũ⃗1=traj.Ũ⃗1, Ũ⃗2=traj.Ũ⃗2, t=traj.t, Δt=traj.Δt, u=new_u);
+        timestep=:Δt,
+        controls=(:Δt, :u),
+        bounds=traj.bounds,
+        initial=traj.initial,
+        goal=traj.goal
+    )
+    
+    # Test rollout! with new pulse
+    new_pulse = extract_pulse(sampling, new_traj)
+    old_solution = get_solution(sampling.base_trajectory)
+    rollout!(sampling, new_pulse)
+    new_solution = get_solution(sampling.base_trajectory)
+    
+    @test new_solution !== old_solution  # Solution was updated
+    @test get_pulse(sampling)(0.5)[1] ≈ 0.5  # Pulse was updated
+    
+    # Test rollout! with ODE parameters
+    rollout!(sampling; n_points=21)
+    @test length(get_solution(sampling.base_trajectory).t) == 21
 end

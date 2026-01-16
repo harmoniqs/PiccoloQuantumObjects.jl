@@ -17,7 +17,7 @@ Trajectory for open quantum systems (Lindblad dynamics).
 # Callable
 `traj(t)` returns the density matrix at time `t`.
 """
-struct DensityTrajectory{P<:AbstractPulse, S<:ODESolution} <: AbstractQuantumTrajectory{P}
+mutable struct DensityTrajectory{P<:AbstractPulse, S<:ODESolution} <: AbstractQuantumTrajectory{P}
     system::OpenQuantumSystem
     pulse::P
     initial::Matrix{ComplexF64}

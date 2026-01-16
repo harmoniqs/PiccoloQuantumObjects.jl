@@ -17,7 +17,7 @@ Trajectory for quantum state transfer. The ODE solution is computed at construct
 # Callable
 `traj(t)` returns the state at time `t` by interpolating the solution.
 """
-struct KetTrajectory{P<:AbstractPulse, S<:ODESolution} <: AbstractQuantumTrajectory{P}
+mutable struct KetTrajectory{P<:AbstractPulse, S<:ODESolution} <: AbstractQuantumTrajectory{P}
     system::QuantumSystem
     pulse::P
     initial::Vector{ComplexF64}

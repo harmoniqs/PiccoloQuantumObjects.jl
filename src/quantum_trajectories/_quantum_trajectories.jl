@@ -7,10 +7,11 @@ using OrdinaryDiffEqTsit5: Tsit5
 using TestItems
 
 using ..QuantumSystems: AbstractQuantumSystem, QuantumSystem, OpenQuantumSystem
-using ..Pulses: AbstractPulse, AbstractSplinePulse, ZeroOrderPulse, LinearSplinePulse, CubicSplinePulse, GaussianPulse
+using ..Pulses: AbstractPulse, AbstractSplinePulse, ZeroOrderPulse, LinearSplinePulse, CubicSplinePulse, GaussianPulse, ErfPulse, CompositePulse
 using ..Pulses: duration, drive_name, n_drives
 import ..Pulses: duration, drive_name
 import ..Rollouts
+import ..Rollouts: rollout!
 using ..Rollouts: UnitaryODEProblem, UnitaryOperatorODEProblem, KetODEProblem, KetOperatorODEProblem, DensityODEProblem
 using ..Rollouts: unitary_fidelity
 using ..EmbeddedOperators: AbstractPiccoloOperator, EmbeddedOperator
@@ -26,17 +27,15 @@ include("unitary_trajectory.jl")
 include("ket_trajectory.jl")
 include("ensemble_trajectory.jl")
 include("density_trajectory.jl")
+include("sampling_trajectory.jl")
 
 # Interface methods (getters, accessors, fidelity)
 include("interface.jl")
 
-# Rebuild from optimized trajectories
-include("rebuild.jl")
+# Extract pulse from optimized trajectories
+include("extract_pulse.jl")
 
 # NamedTrajectory conversion
 include("named_trajectory_conversion.jl")
 
-# Sampling trajectory for robust optimization
-include("sampling_trajectory.jl")
-
-end # module
+end  # module

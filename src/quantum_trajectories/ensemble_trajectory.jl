@@ -1,9 +1,9 @@
 # ============================================================================ #
-# EnsembleKetTrajectory
+# MultiKetTrajectory
 # ============================================================================ #
 
 """
-    EnsembleKetTrajectory{P<:AbstractPulse, S} <: AbstractQuantumTrajectory{P}
+    MultiKetTrajectory{P<:AbstractPulse, S} <: AbstractQuantumTrajectory{P}
 
 Trajectory for multi-state transfer with a shared pulse. Useful for state-to-state
 problems with multiple initial/goal pairs.
@@ -20,7 +20,7 @@ problems with multiple initial/goal pairs.
 `traj(t)` returns a vector of states at time `t`.
 `traj[i]` returns the i-th trajectory's solution.
 """
-struct EnsembleKetTrajectory{P<:AbstractPulse, S} <: AbstractQuantumTrajectory{P}
+mutable struct MultiKetTrajectory{P<:AbstractPulse, S} <: AbstractQuantumTrajectory{P}
     system::QuantumSystem
     pulse::P
     initials::Vector{Vector{ComplexF64}}
@@ -30,9 +30,9 @@ struct EnsembleKetTrajectory{P<:AbstractPulse, S} <: AbstractQuantumTrajectory{P
 end
 
 """
-    EnsembleKetTrajectory(system, pulse, initials, goals; weights=..., algorithm=MagnusGL4())
+    MultiKetTrajectory(system, pulse, initials, goals; weights=..., algorithm=MagnusGL4())
 
-Create an ensemble ket trajectory by solving multiple Schrödinger equations.
+Create a multi-ket trajectory by solving multiple Schrödinger equations.
 
 # Arguments
 - `system::QuantumSystem`: The quantum system
@@ -44,7 +44,7 @@ Create an ensemble ket trajectory by solving multiple Schrödinger equations.
 - `weights`: Weights for fidelity (default: uniform)
 - `algorithm`: ODE solver algorithm (default: MagnusGL4())
 """
-function EnsembleKetTrajectory(
+function MultiKetTrajectory(
     system::QuantumSystem,
     pulse::AbstractPulse,
     initials::Vector{<:AbstractVector{<:Number}},
@@ -68,11 +68,11 @@ function EnsembleKetTrajectory(
     ensemble_prob = EnsembleProblem(base_prob; prob_func=prob_func)
     sol = solve(ensemble_prob, algorithm; trajectories=length(initials), saveat=times)
     
-    return EnsembleKetTrajectory{typeof(pulse), typeof(sol)}(system, pulse, ψ0s, ψgs, ws, sol)
+    return MultiKetTrajectory{typeof(pulse), typeof(sol)}(system, pulse, ψ0s, ψgs, ws, sol)
 end
 
 """
-    EnsembleKetTrajectory(system, initials, goals, T::Real; weights=..., drive_name=:u, algorithm=MagnusGL4())
+    MultiKetTrajectory(system, initials, goals, T::Real; weights=..., drive_name=:u, algorithm=MagnusGL4())
 
 Convenience constructor that creates a zero pulse of duration T.
 
@@ -87,7 +87,7 @@ Convenience constructor that creates a zero pulse of duration T.
 - `drive_name::Symbol`: Name of the drive variable (default: `:u`)
 - `algorithm`: ODE solver algorithm (default: MagnusGL4())
 """
-function EnsembleKetTrajectory(
+function MultiKetTrajectory(
     system::QuantumSystem,
     initials::Vector{<:AbstractVector{<:Number}},
     goals::Vector{<:AbstractVector{<:Number}},
@@ -99,21 +99,21 @@ function EnsembleKetTrajectory(
     times = [0.0, T]
     controls = randn(system.n_drives, 2)
     pulse = ZeroOrderPulse(controls, times; drive_name)
-    return EnsembleKetTrajectory(system, pulse, initials, goals; weights, algorithm)
+    return MultiKetTrajectory(system, pulse, initials, goals; weights, algorithm)
 end
 
 # Callable: sample all solutions at time t
-(traj::EnsembleKetTrajectory)(t::Real) = [sol(t) for sol in traj.solution]
+(traj::MultiKetTrajectory)(t::Real) = [sol(t) for sol in traj.solution]
 
 # Indexing: get individual trajectory solution
-Base.getindex(traj::EnsembleKetTrajectory, i::Int) = traj.solution[i]
-Base.length(traj::EnsembleKetTrajectory) = length(traj.initials)
+Base.getindex(traj::MultiKetTrajectory, i::Int) = traj.solution[i]
+Base.length(traj::MultiKetTrajectory) = length(traj.initials)
 
 # ============================================================================ #
 # Tests
 # ============================================================================ #
 
-@testitem "EnsembleKetTrajectory construction" begin
+@testitem "MultiKetTrajectory construction" begin
     using LinearAlgebra
     
     # Simple 2-level system
@@ -124,9 +124,9 @@ Base.length(traj::EnsembleKetTrajectory) = length(traj.initials)
     initials = [ComplexF64[1.0, 0.0], ComplexF64[0.0, 1.0]]
     goals = [ComplexF64[0.0, 1.0], ComplexF64[1.0, 0.0]]
     
-    qtraj = EnsembleKetTrajectory(system, initials, goals, T)
+    qtraj = MultiKetTrajectory(system, initials, goals, T)
     
-    @test qtraj isa EnsembleKetTrajectory
+    @test qtraj isa MultiKetTrajectory
     @test qtraj.system === system
     @test length(qtraj.initials) == 2
     @test length(qtraj.goals) == 2
@@ -139,13 +139,13 @@ Base.length(traj::EnsembleKetTrajectory) = length(traj.initials)
     pulse = ZeroOrderPulse(controls, times)
     weights = [0.7, 0.3]
     
-    qtraj2 = EnsembleKetTrajectory(system, pulse, initials, goals; weights=weights)
+    qtraj2 = MultiKetTrajectory(system, pulse, initials, goals; weights=weights)
     
-    @test qtraj2 isa EnsembleKetTrajectory
+    @test qtraj2 isa MultiKetTrajectory
     @test qtraj2.weights ≈ weights
 end
 
-@testitem "EnsembleKetTrajectory callable and indexing" begin
+@testitem "MultiKetTrajectory callable and indexing" begin
     using LinearAlgebra
     using OrdinaryDiffEqLinear
     
@@ -155,7 +155,7 @@ end
     initials = [ComplexF64[1.0, 0.0], ComplexF64[0.0, 1.0]]
     goals = [ComplexF64[0.0, 1.0], ComplexF64[1.0, 0.0]]
     
-    qtraj = EnsembleKetTrajectory(system, initials, goals, T)
+    qtraj = MultiKetTrajectory(system, initials, goals, T)
     
     # Test length
     @test length(qtraj) == 2
@@ -175,7 +175,7 @@ end
     @test sol2(0.0) ≈ initials[2]
 end
 
-@testitem "EnsembleKetTrajectory fidelity" begin
+@testitem "MultiKetTrajectory fidelity" begin
     using LinearAlgebra
     
     # System with X drive
@@ -191,14 +191,14 @@ end
     initials = [ComplexF64[1.0, 0.0], ComplexF64[0.0, 1.0]]
     goals = [ComplexF64[0.0, 1.0], ComplexF64[1.0, 0.0]]
     
-    qtraj = EnsembleKetTrajectory(system, pulse, initials, goals)
+    qtraj = MultiKetTrajectory(system, pulse, initials, goals)
     
     # Both transfers should have high fidelity
     fid = fidelity(qtraj)
     @test fid > 0.99
 end
 
-@testitem "EnsembleKetTrajectory state_names" begin
+@testitem "MultiKetTrajectory state_names" begin
     using LinearAlgebra
     
     system = QuantumSystem([PAULIS.X], [1.0])
@@ -206,7 +206,7 @@ end
     initials = [ComplexF64[1.0, 0.0], ComplexF64[0.0, 1.0], ComplexF64[1.0, 1.0]/√2]
     goals = [ComplexF64[0.0, 1.0], ComplexF64[1.0, 0.0], ComplexF64[1.0, -1.0]/√2]
     
-    qtraj = EnsembleKetTrajectory(system, initials, goals, 1.0)
+    qtraj = MultiKetTrajectory(system, initials, goals, 1.0)
     
     @test state_name(qtraj) == :ψ̃
     @test state_names(qtraj) == [:ψ̃1, :ψ̃2, :ψ̃3]

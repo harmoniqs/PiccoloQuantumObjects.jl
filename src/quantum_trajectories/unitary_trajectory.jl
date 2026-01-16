@@ -20,7 +20,7 @@ Trajectory for unitary gate synthesis. The ODE solution is computed at construct
 # Conversion to NamedTrajectory
 Use `NamedTrajectory(traj, N)` or `NamedTrajectory(traj, times)` for optimization.
 """
-struct UnitaryTrajectory{P<:AbstractPulse, S<:ODESolution, G} <: AbstractQuantumTrajectory{P}
+mutable struct UnitaryTrajectory{P<:AbstractPulse, S<:ODESolution, G} <: AbstractQuantumTrajectory{P}
     system::QuantumSystem
     pulse::P
     initial::Matrix{ComplexF64}
