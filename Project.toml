@@ -1,7 +1,7 @@
 name = "PiccoloQuantumObjects"
 uuid = "5a402ddf-f93c-42eb-975e-5582dcda653d"
-version = "0.8.1"
 authors = ["Aaron Trowbridge <aaron.j.trowbridge@gmail.com> and contributors"]
+version = "0.8.3"
 
 [deps]
 DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
@@ -24,7 +24,7 @@ DataInterpolations = "8.8"
 ExponentialAction = "0.2"
 ForwardDiff = "1.2"
 LinearAlgebra = "1.10, 1.11, 1.12"
-NamedTrajectories = "0.7"
+NamedTrajectories = "0.8"
 OrdinaryDiffEqLinear = "1.8"
 OrdinaryDiffEqTsit5 = "1.7"
 ProgressMeter = "1.11"
