@@ -6,48 +6,14 @@ using LinearAlgebra</code></pre><p>Rollouts are simulations of a quantum system.
 ψ_goal = [0.0, 1.0]
 fidelity(ψ, ψ_goal)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1.0</code></pre><p><em>Unitary fidelity of orthogonal operations.</em></p><pre><code class="language-julia hljs">U = GATES.Y
 U_goal = GATES.X
-unitary_fidelity(U, U_goal)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0.0</code></pre><h2 id="Quantum-State-Rollouts"><a class="docs-heading-anchor" href="#Quantum-State-Rollouts">Quantum State Rollouts</a><a id="Quantum-State-Rollouts-1"></a><a class="docs-heading-anchor-permalink" href="#Quantum-State-Rollouts" title="Permalink"></a></h2><p>The <code>rollout</code> function simulates the evolution of a real valued quantum state under given controls and quantum system.</p><article><details class="docstring"><summary id="PiccoloQuantumObjects.Rollouts.rollout-generated-rollouts"><a class="docstring-binding" href="#PiccoloQuantumObjects.Rollouts.rollout-generated-rollouts"><code>PiccoloQuantumObjects.Rollouts.rollout</code></a> — <span class="docstring-category">Function</span></summary><section><div><pre><code class="language-julia hljs">rollout(
-    ψ̃_init::AbstractVector{&lt;:Real},
-    controls::AbstractMatrix{&lt;:Real},
-    Δt::AbstractVector,
-    system::AbstractQuantumSystem
-)
-rollout(
-    ψ_init::AbstractVector{&lt;:Complex},
-    controls::AbstractMatrix{&lt;:Real},
-    Δt::AbstractVector,
-    system::AbstractQuantumSystem
-)
-rollout(
-    inits::AbstractVector{&lt;:AbstractVector},
-    controls::AbstractMatrix{&lt;:Real},
-    Δt::AbstractVector,
-    system::AbstractQuantumSystem
-)</code></pre><p>Rollout a quantum state <code>ψ̃_init</code> under the control <code>controls</code> for a time <code>Δt</code> using the system <code>system</code>.</p><p>If <code>exp_vector_product</code> is <code>true</code>, the integrator is expected to have a signature like the exponential action, <code>expv</code>. Otherwise, it is expected to have a signature like <code>exp</code>.</p><p>Types should allow for autodifferentiable controls and times.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/harmoniqs/PiccoloQuantumObjects.jl/blob/38951f60183743e743678933eb12dd89b12e4f54/src/rollouts.jl#L145-L172">source</a></section></details></article><article><details class="docstring"><summary id="PiccoloQuantumObjects.Rollouts.rollout_fidelity-generated-rollouts"><a class="docstring-binding" href="#PiccoloQuantumObjects.Rollouts.rollout_fidelity-generated-rollouts"><code>PiccoloQuantumObjects.Rollouts.rollout_fidelity</code></a> — <span class="docstring-category">Function</span></summary><section><div><pre><code class="language-julia hljs">rollout_fidelity(
-    ψ̃_init::AbstractVector{&lt;:Real},
-    ψ̃_goal::AbstractVector{&lt;:Real},
-    controls::AbstractMatrix{&lt;:Real},
-    Δt::AbstractVector,
-    system::AbstractQuantumSystem
-)
-rollout_fidelity(
-    ψ_init::AbstractVector{&lt;:Complex},
-    ψ_goal::AbstractVector{&lt;:Complex},
-    controls::AbstractMatrix{&lt;:Real},
-    Δt::AbstractVector,
-    system::AbstractQuantumSystem
-)
-rollout_fidelity(
-    trajectory::NamedTrajectory,
-    system::AbstractQuantumSystem
-)</code></pre><p>Calculate the fidelity between the final state of a rollout and a goal state.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/harmoniqs/PiccoloQuantumObjects.jl/blob/38951f60183743e743678933eb12dd89b12e4f54/src/rollouts.jl#L239-L260">source</a></section></details></article><p><em>The rollout is a matrix of size <code>(2n, T)</code>.</em></p><pre><code class="language-julia hljs">T = 10
+unitary_fidelity(U, U_goal)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0.0</code></pre><h2 id="Quantum-State-Rollouts"><a class="docs-heading-anchor" href="#Quantum-State-Rollouts">Quantum State Rollouts</a><a id="Quantum-State-Rollouts-1"></a><a class="docs-heading-anchor-permalink" href="#Quantum-State-Rollouts" title="Permalink"></a></h2><p>The <code>rollout</code> function simulates the evolution of a real valued quantum state under given controls and quantum system.</p><article><details class="docstring"><summary id="PiccoloQuantumObjects.Rollouts.rollout-generated-rollouts"><a class="docstring-binding" href="#PiccoloQuantumObjects.Rollouts.rollout-generated-rollouts"><code>PiccoloQuantumObjects.Rollouts.rollout</code></a> — <span class="docstring-category">Function</span></summary><section><div><pre><code class="language-julia hljs">rollout(qtraj, args...; kwargs...)</code></pre><p>Roll out a quantum trajectory with new pulse or ODE parameters. Extended in quantum_trajectories module for specific trajectory types.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/harmoniqs/PiccoloQuantumObjects.jl/blob/7d0e64ca0e4a8223f874630f5a8bfe2a856cebed/src/rollouts.jl#L85-L90">source</a></section></details></article><div class="admonition is-warning" id="Missing-docstring.-a5ccc4e67dbd9c0b"><header class="admonition-header">Missing docstring.<a class="admonition-anchor" href="#Missing-docstring.-a5ccc4e67dbd9c0b" title="Permalink"></a></header><div class="admonition-body"><p>Missing docstring for <code>rollout_fidelity</code>. Check Documenter&#39;s build log for details.</p></div></div><p><em>The rollout is a matrix of size <code>(2n, T)</code>.</em></p><pre><code class="language- hljs">T = 10
 ψ_init = ComplexF64[1.0, 0.0]
 controls = rand(2, T)
 Δt = fill(0.1, T)
-system = QuantumSystem(PAULIS[:Z], [PAULIS[:X], PAULIS[:Y]], 1.0, [(-1.0, 1.0), (-1.0, 1.0)])
+system = QuantumSystem(PAULIS[:Z], [PAULIS[:X], PAULIS[:Y]], [(-1.0, 1.0), (-1.0, 1.0)])
 ψ̃_rollout = rollout(ψ_init, controls, Δt, system)
-ψ̃_rollout |&gt; size</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(4, 10)</code></pre><h3 id="Quantum-State-Rollout-Fidelity"><a class="docs-heading-anchor" href="#Quantum-State-Rollout-Fidelity">Quantum State Rollout Fidelity</a><a id="Quantum-State-Rollout-Fidelity-1"></a><a class="docs-heading-anchor-permalink" href="#Quantum-State-Rollout-Fidelity" title="Permalink"></a></h3><p><em>States must be cast to complex for the rollout to know the difference between real and isomorphic states.</em></p><pre><code class="language-julia hljs">ψ_goal = ComplexF64[0.0, 1.0]
-rollout_fidelity(ψ_init, ψ_goal, controls, Δt, system)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0.3953612523406133</code></pre><div class="admonition is-warning" id="Warning-37d60df231410dbb"><header class="admonition-header">Warning<a class="admonition-anchor" href="#Warning-37d60df231410dbb" title="Permalink"></a></header><div class="admonition-body"><p>Don&#39;t forget to convert the quantum state to the appropriate isomorphism before calculating the fidelity.</p></div></div><pre><code class="language-julia hljs">fidelity(iso_to_ket(ψ̃_rollout[:, end]), ψ_goal)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0.3953612523406133</code></pre><p><em>The initial state and goal are often inferred from the properly configured trajectory of a control problem.</em></p><pre><code class="language-julia hljs">components = (ψ̃ = zeros(Float64, size(ψ̃_rollout)), a = controls, Δt = Δt)
+ψ̃_rollout |&gt; size</code></pre><h3 id="Quantum-State-Rollout-Fidelity"><a class="docs-heading-anchor" href="#Quantum-State-Rollout-Fidelity">Quantum State Rollout Fidelity</a><a id="Quantum-State-Rollout-Fidelity-1"></a><a class="docs-heading-anchor-permalink" href="#Quantum-State-Rollout-Fidelity" title="Permalink"></a></h3><p><em>States must be cast to complex for the rollout to know the difference between real and isomorphic states.</em></p><pre><code class="language- hljs">ψ_goal = ComplexF64[0.0, 1.0]
+rollout_fidelity(ψ_init, ψ_goal, controls, Δt, system)</code></pre><div class="admonition is-warning" id="Warning-37d60df231410dbb"><header class="admonition-header">Warning<a class="admonition-anchor" href="#Warning-37d60df231410dbb" title="Permalink"></a></header><div class="admonition-body"><p>Don&#39;t forget to convert the quantum state to the appropriate isomorphism before calculating the fidelity.</p></div></div><pre><code class="language- hljs">fidelity(iso_to_ket(ψ̃_rollout[:, end]), ψ_goal)</code></pre><p><em>The initial state and goal are often inferred from the properly configured trajectory of a control problem.</em></p><pre><code class="language- hljs">components = (ψ̃ = zeros(Float64, size(ψ̃_rollout)), a = controls, Δt = Δt)
 traj = NamedTrajectory(
     components;
     timestep=:Δt,
@@ -55,85 +21,9 @@ traj = NamedTrajectory(
     initial=(ψ̃ = ket_to_iso(ψ_init),),
     goal=(ψ̃ = ket_to_iso(ψ_goal),),
 )
-rollout_fidelity(traj, system)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0.3953612523406133</code></pre><div class="admonition is-info" id="Note-d47e2fff3aa1f896"><header class="admonition-header">Note<a class="admonition-anchor" href="#Note-d47e2fff3aa1f896" title="Permalink"></a></header><div class="admonition-body"><p>The rollout fidelity is not the same thing as the fidelity of the final trajectory state.</p></div></div><pre><code class="language-julia hljs">fidelity(iso_to_ket(traj.ψ̃[:, end]), ψ_goal)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">0.0</code></pre><h2 id="Unitary-Rollouts"><a class="docs-heading-anchor" href="#Unitary-Rollouts">Unitary Rollouts</a><a id="Unitary-Rollouts-1"></a><a class="docs-heading-anchor-permalink" href="#Unitary-Rollouts" title="Permalink"></a></h2><article><details class="docstring"><summary id="PiccoloQuantumObjects.Rollouts.unitary_rollout-generated-rollouts"><a class="docstring-binding" href="#PiccoloQuantumObjects.Rollouts.unitary_rollout-generated-rollouts"><code>PiccoloQuantumObjects.Rollouts.unitary_rollout</code></a> — <span class="docstring-category">Function</span></summary><section><div><pre><code class="language-julia hljs">unitary_rollout(
-    Ũ⃗_init::AbstractVector{&lt;:Real},
-    controls::AbstractMatrix{&lt;:Real},
-    Δt::AbstractVector,
-    system::AbstractQuantumSystem;
-    kwargs...
-)</code></pre><p>Rollout a isomorphic unitary operator <code>Ũ⃗_init</code> under the control <code>controls</code> for a time <code>Δt</code> using the system <code>system</code>.</p><p><strong>Arguments</strong></p><ul><li><code>Ũ⃗_init::AbstractVector{&lt;:Real}</code>: Initial unitary vector</li><li><code>controls::AbstractMatrix{&lt;:Real}</code>: Control matrix</li><li><code>Δt::AbstractVector</code>: Time steps</li><li><code>system::AbstractQuantumSystem</code>: Quantum system</li></ul><p><strong>Keyword Arguments</strong></p><ul><li><code>show_progress::Bool=false</code>: Show progress bar</li><li><code>integrator::Function=expv</code>: Integrator function</li><li><code>exp_vector_product::Bool</code>: Infer whether the integrator is an exponential-vector product</li></ul></div><a class="docs-sourcelink" target="_blank" href="https://github.com/harmoniqs/PiccoloQuantumObjects.jl/blob/38951f60183743e743678933eb12dd89b12e4f54/src/rollouts.jl#L476-L499">source</a></section></details></article><article><details class="docstring"><summary id="PiccoloQuantumObjects.Rollouts.unitary_rollout_fidelity-generated-rollouts"><a class="docstring-binding" href="#PiccoloQuantumObjects.Rollouts.unitary_rollout_fidelity-generated-rollouts"><code>PiccoloQuantumObjects.Rollouts.unitary_rollout_fidelity</code></a> — <span class="docstring-category">Function</span></summary><section><div><pre><code class="language-julia hljs">unitary_rollout_fidelity(
-    Ũ⃗_init::AbstractVector{&lt;:Real},
-    Ũ⃗_goal::AbstractVector{&lt;:Real},
-    controls::AbstractMatrix{&lt;:Real},
-    Δt::AbstractVector,
-    system::AbstractQuantumSystem;
-    kwargs...
-)
-unitary_rollout_fidelity(
-    Ũ⃗_goal::AbstractVector{&lt;:Real},
-    controls::AbstractMatrix{&lt;:Real},
-    Δt::AbstractVector,
-    system::AbstractQuantumSystem;
-    kwargs...
-)
-unitary_rollout_fidelity(
-    U_init::AbstractMatrix{&lt;:Complex},
-    U_goal::AbstractMatrix{&lt;:Complex},
-    controls::AbstractMatrix{&lt;:Real},
-    Δt::AbstractVector,
-    system::AbstractQuantumSystem;
-    kwargs...
-)
-unitary_rollout_fidelity(
-    U_goal::AbstractMatrix{&lt;:Complex},
-    controls::AbstractMatrix{&lt;:Real},
-    Δt::AbstractVector,
-    system::AbstractQuantumSystem;
-    kwargs...
-)
-unitary_rollout_fidelity(
-    U_goal::EmbeddedOperator,
-    controls::AbstractMatrix{&lt;:Real},
-    Δt::AbstractVector,
-    system::AbstractQuantumSystem;
-    subspace::AbstractVector{Int}=U_goal.subspace,
-    kwargs...
-)
-unitary_rollout_fidelity(
-    traj::NamedTrajectory,
-    sys::AbstractQuantumSystem;
-    kwargs...
-)</code></pre><p>Calculate the fidelity between the final state of a unitary rollout and a goal state.  If the initial unitary is not provided, the identity operator is assumed. If <code>phases</code> and <code>phase_operators</code> are provided, the free phase unitary fidelity is calculated.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/harmoniqs/PiccoloQuantumObjects.jl/blob/38951f60183743e743678933eb12dd89b12e4f54/src/rollouts.jl#L564-L613">source</a></section></details></article><pre><code class="language-julia hljs">Ũ⃗_rollout = unitary_rollout(controls, Δt, system)
-Ũ⃗_rollout |&gt; size</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(8, 10)</code></pre><p><em>Convert to unitary operators, and have a look at the initial unitary.</em></p><pre><code class="language-julia hljs">iso_vec_to_operator.(eachcol(Ũ⃗_rollout[:, 1])) |&gt; first</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2×2 Matrix{ComplexF64}:
- 1.0+0.0im  0.0+0.0im
- 0.0+0.0im  1.0+0.0im</code></pre><h2 id="Open-Quantum-System-Rollouts"><a class="docs-heading-anchor" href="#Open-Quantum-System-Rollouts">Open Quantum System Rollouts</a><a id="Open-Quantum-System-Rollouts-1"></a><a class="docs-heading-anchor-permalink" href="#Open-Quantum-System-Rollouts" title="Permalink"></a></h2><article><details class="docstring"><summary id="PiccoloQuantumObjects.Rollouts.open_rollout-generated-rollouts"><a class="docstring-binding" href="#PiccoloQuantumObjects.Rollouts.open_rollout-generated-rollouts"><code>PiccoloQuantumObjects.Rollouts.open_rollout</code></a> — <span class="docstring-category">Function</span></summary><section><div><pre><code class="language-julia hljs">open_rollout(
-    ρ⃗₁::AbstractVector{&lt;:Complex},
-    controls::AbstractMatrix{&lt;:Real},
-    Δt::AbstractVector,
-    system::OpenQuantumSystem;
-    kwargs...
-)</code></pre><p>Rollout a quantum state <code>ρ⃗₁</code> under the control <code>controls</code> for a time <code>Δt</code></p><p><strong>Arguments</strong></p><ul><li><code>ρ⃗₁::AbstractVector{&lt;:Complex}</code>: Initial state vector</li><li><code>controls::AbstractMatrix{&lt;:Real}</code>: Control matrix</li><li><code>Δt::AbstractVector</code>: Time steps</li><li><code>system::OpenQuantumSystem</code>: Quantum system</li></ul><p><strong>Keyword Arguments</strong></p><ul><li><code>show_progress::Bool=false</code>: Show progress bar</li><li><code>integrator::Function=expv</code>: Integrator function</li><li><code>exp_vector_product::Bool</code>: Infer whether the integrator is an exponential-vector product</li></ul></div><a class="docs-sourcelink" target="_blank" href="https://github.com/harmoniqs/PiccoloQuantumObjects.jl/blob/38951f60183743e743678933eb12dd89b12e4f54/src/rollouts.jl#L324-L346">source</a></section></details></article><article><details class="docstring"><summary id="PiccoloQuantumObjects.Rollouts.open_rollout_fidelity-generated-rollouts"><a class="docstring-binding" href="#PiccoloQuantumObjects.Rollouts.open_rollout_fidelity-generated-rollouts"><code>PiccoloQuantumObjects.Rollouts.open_rollout_fidelity</code></a> — <span class="docstring-category">Function</span></summary><section><div><pre><code class="language-julia hljs">open_rollout_fidelity(
-    ρ⃗₁::AbstractVector{&lt;:Complex},
-    ρ⃗₂::AbstractVector{&lt;:Complex},
-    controls::AbstractMatrix{&lt;:Real},
-    Δt::AbstractVector,
-    system::OpenQuantumSystem
-)
-open_rollout_fidelity(
-    ρ₁::AbstractMatrix{&lt;:Complex},
-    ρ₂::AbstractMatrix{&lt;:Complex},
-    controls::AbstractMatrix{&lt;:Real},
-    Δt::AbstractVector,
-    system::OpenQuantumSystem
-)
-open_rollout_fidelity(
-    traj::NamedTrajectory,
-    system::OpenQuantumSystem;
-    state_name::Symbol=:ρ⃗̃,
-    control_name::Symbol=:a,
-    kwargs...
-)</code></pre><p>Calculate the fidelity between the final state of an open quantum system rollout and a goal state.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/harmoniqs/PiccoloQuantumObjects.jl/blob/38951f60183743e743678933eb12dd89b12e4f54/src/rollouts.jl#L403-L428">source</a></section></details></article><p><em>Open rollouts require open quantum systems</em>.</p><pre><code class="language-julia hljs">open_system = OpenQuantumSystem(system)
+rollout_fidelity(traj, system)</code></pre><div class="admonition is-info" id="Note-d47e2fff3aa1f896"><header class="admonition-header">Note<a class="admonition-anchor" href="#Note-d47e2fff3aa1f896" title="Permalink"></a></header><div class="admonition-body"><p>The rollout fidelity is not the same thing as the fidelity of the final trajectory state.</p></div></div><pre><code class="language- hljs">fidelity(iso_to_ket(traj.ψ̃[:, end]), ψ_goal)</code></pre><h2 id="Unitary-Rollouts"><a class="docs-heading-anchor" href="#Unitary-Rollouts">Unitary Rollouts</a><a id="Unitary-Rollouts-1"></a><a class="docs-heading-anchor-permalink" href="#Unitary-Rollouts" title="Permalink"></a></h2><div class="admonition is-warning" id="Missing-docstring.-9db6a5d6195a62a6"><header class="admonition-header">Missing docstring.<a class="admonition-anchor" href="#Missing-docstring.-9db6a5d6195a62a6" title="Permalink"></a></header><div class="admonition-body"><p>Missing docstring for <code>unitary_rollout</code>. Check Documenter&#39;s build log for details.</p></div></div><div class="admonition is-warning" id="Missing-docstring.-f412ffa0665a5f08"><header class="admonition-header">Missing docstring.<a class="admonition-anchor" href="#Missing-docstring.-f412ffa0665a5f08" title="Permalink"></a></header><div class="admonition-body"><p>Missing docstring for <code>unitary_rollout_fidelity</code>. Check Documenter&#39;s build log for details.</p></div></div><pre><code class="language- hljs">Ũ⃗_rollout = unitary_rollout(controls, Δt, system)
+Ũ⃗_rollout |&gt; size</code></pre><p><em>Convert to unitary operators, and have a look at the initial unitary.</em></p><pre><code class="language- hljs">iso_vec_to_operator.(eachcol(Ũ⃗_rollout[:, 1])) |&gt; first</code></pre><h2 id="Open-Quantum-System-Rollouts"><a class="docs-heading-anchor" href="#Open-Quantum-System-Rollouts">Open Quantum System Rollouts</a><a id="Open-Quantum-System-Rollouts-1"></a><a class="docs-heading-anchor-permalink" href="#Open-Quantum-System-Rollouts" title="Permalink"></a></h2><div class="admonition is-warning" id="Missing-docstring.-acc5356c1a347709"><header class="admonition-header">Missing docstring.<a class="admonition-anchor" href="#Missing-docstring.-acc5356c1a347709" title="Permalink"></a></header><div class="admonition-body"><p>Missing docstring for <code>open_rollout</code>. Check Documenter&#39;s build log for details.</p></div></div><div class="admonition is-warning" id="Missing-docstring.-2cd8bb3d2e204f82"><header class="admonition-header">Missing docstring.<a class="admonition-anchor" href="#Missing-docstring.-2cd8bb3d2e204f82" title="Permalink"></a></header><div class="admonition-body"><p>Missing docstring for <code>open_rollout_fidelity</code>. Check Documenter&#39;s build log for details.</p></div></div><p><em>Open rollouts require open quantum systems</em>.</p><pre><code class="language- hljs">open_system = OpenQuantumSystem(system)
 
 ρ_init = ψ_init * ψ_init&#39;
 ρ̃⃗_rollout = open_rollout(ρ_init, controls, Δt, open_system)
-ρ̃⃗_rollout |&gt; size</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(8, 10)</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../quantum_objects/">« Quantum Objects</a><a class="docs-footer-nextpage" href="../isomorphisms/">Isomorphisms »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Friday 16 January 2026 09:03">Friday 16 January 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body><div data-docstringscollapsed="true"></div></html>
+ρ̃⃗_rollout |&gt; size</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../quantum_objects/">« Quantum Objects</a><a class="docs-footer-nextpage" href="../isomorphisms/">Isomorphisms »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Friday 16 January 2026 18:33">Friday 16 January 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body><div data-docstringscollapsed="true"></div></html>
