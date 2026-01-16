@@ -34,18 +34,14 @@ VariationalQuantumSystem
 H_drift = 0.0 * PAULIS[:Z]  # No drift
 H_drives = [PAULIS[:X], PAULIS[:Y]]
 H_vars = [PAULIS[:X], PAULIS[:Y]]
-T_max = 10.0
 drive_bounds = [(-1.0, 1.0), (-1.0, 1.0)]
-varsys = VariationalQuantumSystem(H_drift, H_drives, H_vars, T_max, drive_bounds)
+varsys = VariationalQuantumSystem(H_drift, H_drives, H_vars, drive_bounds)
 
 # _The system has 2 drives and 2 variational operators._
 varsys.n_drives
 
 #
 length(varsys.G_vars)
-
-# _Check T_max and drive_bounds._
-varsys.T_max
 
 #
 varsys.drive_bounds
@@ -86,12 +82,12 @@ Variational quantum systems are particularly useful for:
 !!! note "No drift constructor"
     You can create a variational system with no drift Hamiltonian by omitting `H_drift`:
     ```julia
-    varsys = VariationalQuantumSystem(H_drives, H_vars, T_max, drive_bounds)
+    varsys = VariationalQuantumSystem(H_drives, H_vars, drive_bounds)
     ```
 =#
 
 # _Create a variational system with only drive and variational operators._
-varsys_nodrift = VariationalQuantumSystem([PAULIS[:X], PAULIS[:Y]], [PAULIS[:Z]], 10.0, [1.0, 1.0])
+varsys_nodrift = VariationalQuantumSystem([PAULIS[:X], PAULIS[:Y]], [PAULIS[:Z]], [1.0, 1.0])
 varsys_nodrift.n_drives
 
 #
@@ -110,7 +106,7 @@ H_var_funcs = [
     a -> a[1] * PAULIS[:X],  # Sensitivity to X scaling
     a -> PAULIS[:Z]           # Sensitivity to Z perturbation
 ]
-varsys_func = VariationalQuantumSystem(H_func, H_var_funcs, 2, 10.0, [1.0, 1.0])
+varsys_func = VariationalQuantumSystem(H_func, H_var_funcs, 2, [1.0, 1.0])
 
 # _The functional system behaves similarly._
 varsys_func.n_drives

@@ -32,7 +32,6 @@ where `a` is the annihilation operator.
 - `drives`: Whether to include drives in the Hamiltonian.
 """
 function TransmonSystem(;
-    T_max::Float64=10.0,
     drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=fill(1.0, 2),
     ω::Float64=4.0,  # GHz
     δ::Float64=0.2, # GHz
@@ -91,7 +90,6 @@ function TransmonSystem(;
     return QuantumSystem(
         H_drift,
         H_drives,
-        T_max,
         drive_bounds
     )
 end
@@ -189,7 +187,6 @@ end
         ωs::AbstractVector{Float64},
         δs::AbstractVector{Float64},
         gs::AbstractMatrix{Float64};
-        T_max::Float64=10.0,
         drive_bounds::Union{Float64, Vector{<:Union{Tuple{Float64, Float64}, Float64}}}=1.0,
         levels_per_transmon::Int = 3,
         subsystem_levels::AbstractVector{Int} = fill(levels_per_transmon, length(ωs)),
@@ -205,7 +202,6 @@ function MultiTransmonSystem(
     ωs::AbstractVector{Float64},
     δs::AbstractVector{Float64},
     gs::AbstractMatrix{Float64};
-    T_max::Float64=10.0,
     drive_bounds::Union{Float64, Vector{<:Union{Tuple{Float64, Float64}, Float64}}}=1.0,
     levels_per_transmon::Int = 3,
     subsystem_levels::AbstractVector{Int} = fill(levels_per_transmon, length(ωs)),
@@ -230,7 +226,6 @@ function MultiTransmonSystem(
     for (i, (ω, δ, levels)) ∈ enumerate(zip(ωs, δs, subsystem_levels))
         if i ∈ subsystems
             sysᵢ = TransmonSystem(
-                T_max=T_max,
                 drive_bounds=drive_bounds_vec,
                 levels=levels,
                 ω=ω,
@@ -257,7 +252,7 @@ function MultiTransmonSystem(
 
     levels = prod([sys.levels for sys in systems])
     H_drift = sum(c -> c.op, couplings; init=zeros(ComplexF64, levels, levels))
-    return CompositeQuantumSystem(H_drift, systems, T_max, drive_bounds_vec)
+    return CompositeQuantumSystem(H_drift, systems, drive_bounds_vec)
 end
 
 # *************************************************************************** #
@@ -356,7 +351,6 @@ end
         χ′::Float64=2π * 1.5e-9,    # Higher-order dispersive shift (GHz)
         K_c::Float64=2π * 1e-9 / 2, # Cavity self-Kerr (GHz)
         K_q::Float64=2π * 193e-3 / 2, # Qubit self-Kerr (GHz)
-        T_max::Float64=10.0,
         drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=fill(1.0, 4),
         multiply_by_2π::Bool=false, # Already in GHz with 2π factors
     ) -> QuantumSystem
@@ -398,7 +392,6 @@ The drives are:
 - `χ′`: Higher-order dispersive shift in GHz. Typically small (~2π × 1-2 Hz)
 - `K_c`: Cavity self-Kerr in GHz. Typically ~2π × 1 Hz
 - `K_q`: Qubit self-Kerr (anharmonicity/2) in GHz. Typical: ~2π × 100-200 MHz
-- `T_max`: Maximum evolution time
 - `drive_bounds`: Control bounds for [Ωᵣ(qubit), Ωᵢ(qubit), αᵣ(cavity), αᵢ(cavity)]
 - `multiply_by_2π`: Whether to multiply by 2π (default false, assuming parameters already include it)
 
@@ -425,7 +418,6 @@ function TransmonCavitySystem(;
     χ′::Float64=2π * 1.5e-9,
     K_c::Float64=2π * 1e-9 / 2,
     K_q::Float64=2π * 193e-3 / 2,
-    T_max::Float64=10.0,
     drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=fill(1.0, 4),
     multiply_by_2π::Bool=false,
 )
@@ -459,7 +451,6 @@ function TransmonCavitySystem(;
     return QuantumSystem(
         H_drift,
         H_drives,
-        T_max,
         drive_bounds
     )
 end

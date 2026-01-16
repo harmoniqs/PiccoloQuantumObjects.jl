@@ -42,7 +42,6 @@ end
         local_detune::Bool=false, # If true, include one local detuning pattern.
         all2all::Bool=true, # If true, include all-to-all interactions.
         ignore_Y_drive::Bool=false, # If true, ignore the Y drive. (In the experiments, X&Y drives are implemented by Rabi amplitude and its phase.)
-        T_max::Float64=10.0, # Maximum evolution time
         drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=[1.0, 1.0, 1.0], # Bounds for [Ωx, Ωy, Δ] or [Ωx, Δ] if ignore_Y_drive
     ) -> QuantumSystem
 
@@ -62,7 +61,6 @@ H = \sum_i 0.5*\Omega_i(t)\cos(\phi_i(t)) \sigma_i^x - 0.5*\Omega_i(t)\sin(\phi_
 - `local_detune`: If true, include one local detuning pattern.
 - `all2all`: If true, include all-to-all interactions.
 - `ignore_Y_drive`: If true, ignore the Y drive. (In the experiments, X&Y drives are implemented by Rabi amplitude and its phase.)
-- `T_max`: Maximum evolution time.
 - `drive_bounds`: Bounds for drive amplitudes.
 """
 function RydbergChainSystem(;
@@ -73,8 +71,8 @@ function RydbergChainSystem(;
     local_detune::Bool=false,
     all2all::Bool=true,
     ignore_Y_drive::Bool=false,
-    T_max::Float64=10.0,
     drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=ignore_Y_drive ? [1.0, 1.0] : [1.0, 1.0, 1.0],
+    time_dependent::Bool=true
 )
     PAULIS = (
         I = ComplexF64[1 0; 0 1],
@@ -124,8 +122,8 @@ function RydbergChainSystem(;
     return QuantumSystem(
         H_drift,
         H_drives,
-        T_max,
-        drive_bounds
+        drive_bounds;
+        time_dependent=time_dependent
     )
 end
 

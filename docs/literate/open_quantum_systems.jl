@@ -23,9 +23,8 @@ OpenQuantumSystem
 H_drives = [PAULIS[:X]]
 a = annihilate(2)
 dissipation_operators = [a'a, a]
-T_max = 10.0
 drive_bounds = [(-1.0, 1.0)]
-system = OpenQuantumSystem(H_drives, T_max, drive_bounds, dissipation_operators=dissipation_operators)
+system = OpenQuantumSystem(H_drives, drive_bounds, dissipation_operators=dissipation_operators)
 system.dissipation_operators[1] |> sparse
 
 # 

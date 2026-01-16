@@ -1,6 +1,5 @@
 export IonChainSystem
 export MolmerSorensenCoupling
-export IonChainMSSystem
 
 @doc raw"""
     IonChainSystem(;
@@ -14,7 +13,6 @@ export IonChainMSSystem
         lab_frame::Bool=false,
         frame_ω::Float64=lab_frame ? 0.0 : (ωq isa Vector ? ωq[1] : ωq),
         multiply_by_2π::Bool=true,
-        T_max::Float64=10.0,
         drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=fill(1.0, 2*N_ions),
     ) -> QuantumSystem
 
@@ -60,7 +58,6 @@ where:
 - `lab_frame`: If true, use lab frame Hamiltonian. If false, use rotating frame.
 - `frame_ω`: Rotating frame frequency in GHz. Defaults to first ion frequency.
 - `multiply_by_2π`: Whether to multiply Hamiltonian by 2π (default true, since frequencies are in GHz).
-- `T_max`: Maximum evolution time.
 - `drive_bounds`: Control bounds. Vector of length `2*N_ions` for [Ωx₁, Ωy₁, Ωx₂, Ωy₂, ...].
 
 # Example
@@ -93,7 +90,6 @@ function IonChainSystem(;
     lab_frame::Bool=false,
     frame_ω::Float64=lab_frame ? 0.0 : (ωq isa Vector ? ωq[1] : ωq),
     multiply_by_2π::Bool=true,
-    T_max::Float64=10.0,
     drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=fill(1.0, 2*N_ions),
 )
     # Convert scalar parameters to vectors
@@ -178,7 +174,6 @@ function IonChainSystem(;
     return QuantumSystem(
         H_drift,
         H_drives,
-        T_max,
         drive_bounds
     )
 end
@@ -258,197 +253,6 @@ function MolmerSorensenCoupling(
     return H_MS
 end
 
-@doc raw"""
-    IonChainMSSystem(;
-        N_ions::Int=2,
-        ion_levels::Int=2,
-        N_modes::Int=1,
-        mode_levels::Int=10,
-        η::Union{Float64, Matrix{Float64}}=0.1,
-        ωm::Union{Float64, Vector{Float64}}=0.1,
-        δ::Union{Float64, Vector{Float64}}=0.0,
-        multiply_by_2π::Bool=true,
-        T_max::Float64=10.0,
-        drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=fill(1.0, N_ions),
-    ) -> QuantumSystem
-
-Returns a time-dependent `QuantumSystem` for Mølmer-Sørensen (MS) gate in trapped ion chain.
-
-This implements the **bichromatic drive** scheme where lasers are detuned to the red and blue 
-motional sidebands, creating an effective spin-spin interaction.
-
-# Time-Dependent Hamiltonian
-
-Following the standard MS gate formulation, the Hamiltonian in the interaction picture is:
-
-```math
-H(t) = -\frac{i}{2} \sum_{i,k} \sigma_{x,i} \eta_{k,i} \Omega_i a_k e^{-i\delta_k t} + \text{h.c.}
-```
-
-which expands to:
-
-```math
-H(t) = -\frac{i}{2} \sum_{i,k} \eta_{k,i} \Omega_i \sigma_{x,i} \left( a_k e^{-i\delta_k t} - a_k^\dagger e^{i\delta_k t} \right)
-```
-
-where:
-- $\Omega_i$ is the control amplitude (Rabi frequency) for ion $i$
-- $\eta_{k,i}$ is the Lamb-Dicke parameter for ion $i$ and mode $k$
-- $\delta_k$ is the detuning from motional sideband for mode $k$
-- $a_k, a_k^\dagger$ are phonon annihilation/creation operators for mode $k$
-- $\sigma_{x,i}$ is the Pauli-X operator on ion $i$
-
-# Effective Interaction
-
-After integrating out fast oscillations and phonon degrees of freedom (adiabatic elimination), 
-this produces the effective MS interaction:
-
-```math
-H_{\text{eff}} \approx \sum_{i<j} \frac{\eta_i \eta_j \Omega^2}{4\delta} \sigma_i^x \sigma_j^x
-```
-
-This directly creates entanglement between ions without needing to individually address them!
-
-# Keyword Arguments
-- `N_ions`: Number of ions
-- `ion_levels`: Levels per ion (typically 2 for qubits)
-- `N_modes`: Number of motional modes
-- `mode_levels`: Fock states per mode
-- `η`: Lamb-Dicke parameter(s) - scalar or N_ions × N_modes matrix
-- `ωm`: Motional frequencies (scalar or vector)
-- `δ`: Detuning from sideband (scalar or vector per mode). Typical: δ ~ 0.1 × ωm
-- `multiply_by_2π`: Multiply by 2π (default true)
-- `T_max`: Maximum time
-- `drive_bounds`: Control bounds (length N_ions for individual ion addressing)
-
-# Example
-```julia
-# Two-ion MS gate
-sys = IonChainMSSystem(
-    N_ions=2,
-    N_modes=1,
-    η=0.1,
-    ωm=0.1,     # 100 MHz trap
-    δ=0.01,     # 10 kHz detuning
-)
-```
-
-# References
-- Sørensen & Mølmer, "Quantum computation with ions in thermal motion," PRL 82, 1971 (1999)
-- Sørensen & Mølmer, "Entanglement and quantum computation...," PRA 62, 022311 (2000)
-
-# Note
-This returns a time-dependent system where `H(u, t)` includes the carrier terms $e^{\pm i\delta_k t}$.
-Use with `UnitarySplineIntegrator` or similar time-dependent integrators in QuantumCollocation.
-"""
-function IonChainMSSystem(;
-    N_ions::Int=2,
-    ion_levels::Int=2,
-    N_modes::Int=1,
-    mode_levels::Int=10,
-    η::Union{Float64, Matrix{Float64}}=0.1,
-    ωm::Union{Float64, Vector{Float64}}=0.1,
-    δ::Union{Float64, Vector{Float64}}=0.0,
-    multiply_by_2π::Bool=true,
-    T_max::Float64=10.0,
-    drive_bounds::Vector{<:Union{Tuple{Float64, Float64}, Float64}}=fill(1.0, N_ions),
-)
-    # Convert parameters to arrays
-    ωm_vec = ωm isa Vector ? ωm : fill(ωm, N_modes)
-    δ_vec = δ isa Vector ? δ : fill(δ, N_modes)
-    η_mat = η isa Float64 ? fill(η, N_ions, N_modes) : η
-    
-    @assert length(ωm_vec) == N_modes
-    @assert length(δ_vec) == N_modes
-    @assert size(η_mat) == (N_ions, N_modes)
-    @assert length(drive_bounds) == N_ions
-    
-    # Hilbert space dimensions
-    # Subsystem structure: [ion_1, ion_2, ..., ion_N, mode_1, mode_2, ..., mode_M]
-    subsystem_levels = vcat(fill(ion_levels, N_ions), fill(mode_levels, N_modes))
-    ion_dim = ion_levels^N_ions
-    mode_dim = mode_levels^N_modes
-    total_dim = ion_dim * mode_dim
-    
-    # Pauli-X operator (following paper's convention)
-    if ion_levels == 2
-        σ_x = ComplexF64[0 1; 1 0]
-    else
-        # For multi-level: use |0⟩↔|1⟩ transition
-        σ_plus = zeros(ComplexF64, ion_levels, ion_levels)
-        σ_plus[2, 1] = 1.0
-        σ_minus = zeros(ComplexF64, ion_levels, ion_levels)
-        σ_minus[1, 2] = 1.0
-        σ_x = σ_plus + σ_minus
-    end
-    
-    # No drift Hamiltonian - we're in the interaction picture with respect to H_HO
-    # The mode frequencies only appear in the detuning δ = μ - ω_k
-    H_drift = zeros(ComplexF64, total_dim, total_dim)
-    
-    # Time-dependent drive operators following paper Eq. 2:
-    # H(t) = -i/2 Σᵢ,ₖ σₓ,ᵢ ηₖ,ᵢ Ωᵢ aₖ e^{-iδₖt} + h.c.
-    #      = -i/2 Σᵢ,ₖ ηₖ,ᵢ Ωᵢ σₓ,ᵢ (aₖ e^{-iδₖt} - aₖ† e^{iδₖt})
-    
-    # Build base drive matrices for each ion: Σₖ ηₖ,ᵢ σₓ,ᵢ aₖ (without time dependence)
-    # We store separate operators for a and a† terms to apply correct time phases
-    H_drives_a = Matrix{ComplexF64}[]      # Terms with aₖ (get e^{-iδₖt})
-    H_drives_adag = Matrix{ComplexF64}[]   # Terms with aₖ† (get e^{+iδₖt})
-    
-    for j in 1:N_ions
-        H_j_a = zeros(ComplexF64, total_dim, total_dim)
-        H_j_adag = zeros(ComplexF64, total_dim, total_dim)
-        
-        σ_x_j = lift_operator(σ_x, j, subsystem_levels)
-        
-        for m in 1:N_modes
-            if abs(η_mat[j, m]) > 1e-12
-                a_m = annihilate(mode_levels)
-                a_op = lift_operator(a_m, N_ions + m, subsystem_levels)
-                adag_op = lift_operator(Matrix(a_m'), N_ions + m, subsystem_levels)
-                
-                # H = -i/2 η σₓ (a e^{-iδt} - a† e^{iδt})
-                H_j_a += η_mat[j, m] * σ_x_j * a_op
-                H_j_adag += η_mat[j, m] * σ_x_j * adag_op
-            end
-        end
-        
-        push!(H_drives_a, H_j_a)
-        push!(H_drives_adag, H_j_adag)
-    end
-    
-    if multiply_by_2π
-        H_drift *= 2π
-        H_drives_a = [2π * H for H in H_drives_a]
-        H_drives_adag = [2π * H for H in H_drives_adag]
-        δ_vec = 2π .* δ_vec
-    end
-    
-    # Create time-dependent system
-    # H(u, t) = H_drift + Σⱼ uⱼ(t) × [-i/2 Σₖ ηₖ,ⱼ σₓ,ⱼ (aₖ e^{-iδₖt} - aₖ† e^{iδₖt})]
-    H_time_dep(u, t) = begin
-        H = copy(H_drift)
-        for j in 1:N_ions
-            # Apply time-dependent phases per mode
-            # For simplicity with single δ, use average; for multiple modes, 
-            # the η_mat already encodes which modes couple to which ions
-            phase_neg = exp(-1.0im * δ_vec[1] * t)  # e^{-iδt} for a terms
-            phase_pos = exp(+1.0im * δ_vec[1] * t)  # e^{+iδt} for a† terms
-            
-            # H = -i/2 × Ω × (a e^{-iδt} - a† e^{iδt})
-            H += -0.5im * u[j] * (H_drives_a[j] * phase_neg - H_drives_adag[j] * phase_pos)
-        end
-        return H
-    end
-    
-    return QuantumSystem(
-        H_time_dep,
-        T_max,
-        drive_bounds;
-        time_dependent=true
-    )
-end
-
 # *************************************************************************** #
 
 @testitem "IonChainSystem: basic construction" begin
@@ -517,25 +321,4 @@ end
     # Three ions
     H_MS3 = MolmerSorensenCoupling(3, 1, 2, 3, 0.1, 0.1)
     @test size(H_MS3) == (2^3 * 3, 2^3 * 3)
-end
-
-@testitem "IonChainMSSystem: time-dependent construction" begin
-    using PiccoloQuantumObjects
-    using LinearAlgebra: ishermitian
-    
-    # Basic MS system
-    sys = IonChainMSSystem(N_ions=2, N_modes=1, δ=0.01, mode_levels=3)
-    @test sys isa QuantumSystem
-    @test sys.n_drives == 2
-    @test sys.levels == 2^2 * 3
-    @test sys.time_dependent == true
-    
-    # Check time-dependent Hamiltonian evaluates correctly
-    u_test = [0.5, 0.5]
-    H_t0 = sys.H(u_test, 0.0)
-    H_t1 = sys.H(u_test, 1.0)
-    @test size(H_t0) == (12, 12)
-    @test H_t0 != H_t1  # Should be different due to time dependence
-    @test ishermitian(H_t0)
-    @test ishermitian(H_t1)
 end
