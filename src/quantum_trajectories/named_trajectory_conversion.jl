@@ -272,22 +272,7 @@ function NamedTrajectory(
     )
     
     # Add global variables if provided
-    if !isnothing(global_data)
-        # Convert Dict{Symbol, Vector} to flat vector and components NamedTuple
-        global_names = sort(collect(keys(global_data)))  # Consistent ordering
-        global_vec = vcat([global_data[name] for name in global_names]...)
-        offset = 0
-        global_comps_list = []
-        for name in global_names
-            len = length(global_data[name])
-            push!(global_comps_list, name => (offset+1:offset+len))
-            offset += len
-        end
-        nt_kwargs = merge(nt_kwargs, (
-            global_data=global_vec,
-            global_components=NamedTuple(global_comps_list)
-        ))
-    end
+    nt_kwargs = _add_global_data_to_kwargs(nt_kwargs, global_data)
     
     return NamedTrajectory(data; nt_kwargs...)
 end
