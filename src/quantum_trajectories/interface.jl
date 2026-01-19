@@ -829,12 +829,12 @@ function Rollouts._update_system!(qtraj::MultiKetTrajectory, sys::QuantumSystem)
 end
 
 """
-    Rollouts._update_system!(qtraj::DensityTrajectory, sys::QuantumSystem)
+    Rollouts._update_system!(qtraj::DensityTrajectory, sys::OpenQuantumSystem)
 
-Update the system field in a DensityTrajectory with a new QuantumSystem
+Update the system field in a DensityTrajectory with a new OpenQuantumSystem
 (typically with updated global parameters after optimization).
 """
-function Rollouts._update_system!(qtraj::DensityTrajectory, sys::QuantumSystem)
+function Rollouts._update_system!(qtraj::DensityTrajectory, sys::OpenQuantumSystem)
     qtraj.system = sys
     return nothing
 end
