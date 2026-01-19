@@ -1,6 +1,6 @@
 name = "PiccoloQuantumObjects"
 uuid = "5a402ddf-f93c-42eb-975e-5582dcda653d"
-version = "0.10.0"
+version = "0.10.1"
 authors = ["Aaron Trowbridge <aaron.j.trowbridge@gmail.com> and contributors"]
 
 [deps]
