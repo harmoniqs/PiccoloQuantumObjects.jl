@@ -790,3 +790,64 @@ end
     @test length(qtraj_new.solution.u) == 301
     @test qtraj_new.pulse === pulse2
 end
+
+# ============================================================================ #
+# Update system with optimized global parameters
+# ============================================================================ #
+
+"""
+    Rollouts._update_system!(qtraj::UnitaryTrajectory, sys::QuantumSystem)
+
+Update the system field in a UnitaryTrajectory with a new QuantumSystem
+(typically with updated global parameters after optimization).
+"""
+function Rollouts._update_system!(qtraj::UnitaryTrajectory, sys::QuantumSystem)
+    qtraj.system = sys
+    return nothing
+end
+
+"""
+    Rollouts._update_system!(qtraj::KetTrajectory, sys::QuantumSystem)
+
+Update the system field in a KetTrajectory with a new QuantumSystem
+(typically with updated global parameters after optimization).
+"""
+function Rollouts._update_system!(qtraj::KetTrajectory, sys::QuantumSystem)
+    qtraj.system = sys
+    return nothing
+end
+
+"""
+    Rollouts._update_system!(qtraj::MultiKetTrajectory, sys::QuantumSystem)
+
+Update the system field in a MultiKetTrajectory with a new QuantumSystem
+(typically with updated global parameters after optimization).
+"""
+function Rollouts._update_system!(qtraj::MultiKetTrajectory, sys::QuantumSystem)
+    qtraj.system = sys
+    return nothing
+end
+
+"""
+    Rollouts._update_system!(qtraj::DensityTrajectory, sys::QuantumSystem)
+
+Update the system field in a DensityTrajectory with a new QuantumSystem
+(typically with updated global parameters after optimization).
+"""
+function Rollouts._update_system!(qtraj::DensityTrajectory, sys::QuantumSystem)
+    qtraj.system = sys
+    return nothing
+end
+
+"""
+    Rollouts._update_system!(qtraj::SamplingTrajectory, sys::QuantumSystem)
+
+Update the system in the base_trajectory of a SamplingTrajectory.
+Note: This only updates the base trajectory's system, not the systems array.
+For updating parameter variations in the systems array, that should be done
+through the SamplingTrajectory constructor or direct modification.
+"""
+function Rollouts._update_system!(qtraj::SamplingTrajectory, sys::QuantumSystem)
+    _update_system!(qtraj.base_trajectory, sys)
+    return nothing
+end

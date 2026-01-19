@@ -167,6 +167,8 @@ for time-dependent integrators used with `SplinePulseProblem`.
 # Keyword Arguments
 - `Δt_bounds`: Optional tuple `(lower, upper)` for timestep bounds. If provided,
   enables free-time optimization (minimum-time problems). Default: `nothing` (no bounds).
+- `global_data`: Optional Dict mapping global variable names to initial values
+- `global_bounds`: Optional Dict mapping global variable names to (lower, upper) bounds
 
 # Returns
 A NamedTrajectory suitable for direct collocation optimization.
@@ -174,11 +176,20 @@ A NamedTrajectory suitable for direct collocation optimization.
 function NamedTrajectory(
     qtraj::UnitaryTrajectory,
     N_or_times::Union{Int, AbstractVector{<:Real}};
-    Δt_bounds::Union{Nothing, Tuple{Float64, Float64}}=nothing
+    Δt_bounds::Union{Nothing, Tuple{Float64, Float64}}=nothing,
+    global_data::Union{Nothing, Dict{Symbol, <:AbstractVector}}=nothing,
+    global_bounds::Union{Nothing, Dict{Symbol, Tuple{Float64, Float64}}}=nothing
 )
     times = _sample_times(qtraj, N_or_times)
     T = length(times)
     s_name = state_name(qtraj)
+    
+    # Auto-populate global_data from system if not provided
+    if isnothing(global_data) && !isempty(qtraj.system.global_params)
+        global_data = Dict(
+            name => [val] for (name, val) in pairs(qtraj.system.global_params)
+        )
+    end
     
     # Sample unitary states
     states = [qtraj(t) for t in times]
@@ -216,8 +227,8 @@ function NamedTrajectory(
         bounds = merge(bounds, (Δt = ([Δt_bounds[1]], [Δt_bounds[2]]),))
     end
     
-    return NamedTrajectory(
-        data;
+    # Build kwargs for NamedTrajectory constructor
+    nt_kwargs = (
         timestep=:Δt,
         controls=(:Δt, control_names...),
         bounds=bounds,
@@ -225,6 +236,29 @@ function NamedTrajectory(
         final=final_nt,
         goal=goal_nt
     )
+    
+    # Add global variables if provided
+    if !isnothing(global_data)
+        # Convert Dict{Symbol, Vector} to flat vector and components NamedTuple
+        global_names = sort(collect(keys(global_data)))  # Consistent ordering
+        global_vec = vcat([global_data[name] for name in global_names]...)
+        offset = 0
+        global_comps_list = []
+        for name in global_names
+            len = length(global_data[name])
+            push!(global_comps_list, name => (offset+1:offset+len))
+            offset += len
+        end
+        nt_kwargs = merge(nt_kwargs, (
+            global_data=global_vec,
+            global_components=NamedTuple(global_comps_list)
+        ))
+        
+        # Note: global_bounds are not used here - global variables don't have bounds in NamedTrajectory
+        # They are optimization variables without explicit box constraints
+    end
+    
+    return NamedTrajectory(data; nt_kwargs...)
 end
 
 """
@@ -242,15 +276,26 @@ Convert a KetTrajectory to a NamedTrajectory for optimization.
 # Keyword Arguments
 - `Δt_bounds`: Optional tuple `(lower, upper)` for timestep bounds. If provided,
   enables free-time optimization (minimum-time problems). Default: `nothing` (no bounds).
+- `global_data`: Optional Dict mapping global variable names to initial values
+- `global_bounds`: Optional Dict mapping global variable names to (lower, upper) bounds
 """
 function NamedTrajectory(
     qtraj::KetTrajectory,
     N_or_times::Union{Int, AbstractVector{<:Real}};
-    Δt_bounds::Union{Nothing, Tuple{Float64, Float64}}=nothing
+    Δt_bounds::Union{Nothing, Tuple{Float64, Float64}}=nothing,
+    global_data::Union{Nothing, Dict{Symbol, <:AbstractVector}}=nothing,
+    global_bounds::Union{Nothing, Dict{Symbol, Tuple{Float64, Float64}}}=nothing
 )
     times = _sample_times(qtraj, N_or_times)
     T = length(times)
     s_name = state_name(qtraj)
+    
+    # Auto-populate global_data from system if not provided
+    if isnothing(global_data) && !isempty(qtraj.system.global_params)
+        global_data = Dict(
+            name => [val] for (name, val) in pairs(qtraj.system.global_params)
+        )
+    end
     
     # Sample ket states
     states = [qtraj(t) for t in times]
@@ -285,8 +330,8 @@ function NamedTrajectory(
         bounds = merge(bounds, (Δt = ([Δt_bounds[1]], [Δt_bounds[2]]),))
     end
     
-    return NamedTrajectory(
-        data;
+    # Build kwargs for NamedTrajectory constructor
+    nt_kwargs = (
         timestep=:Δt,
         controls=(:Δt, control_names...),
         bounds=bounds,
@@ -294,6 +339,29 @@ function NamedTrajectory(
         final=final_nt,
         goal=goal_nt
     )
+    
+    # Add global variables if provided
+    if !isnothing(global_data)
+        # Convert Dict{Symbol, Vector} to flat vector and components NamedTuple
+        global_names = sort(collect(keys(global_data)))  # Consistent ordering
+        global_vec = vcat([global_data[name] for name in global_names]...)
+        offset = 0
+        global_comps_list = []
+        for name in global_names
+            len = length(global_data[name])
+            push!(global_comps_list, name => (offset+1:offset+len))
+            offset += len
+        end
+        nt_kwargs = merge(nt_kwargs, (
+            global_data=global_vec,
+            global_components=NamedTuple(global_comps_list)
+        ))
+        
+        # Note: global_bounds are not used here - global variables don't have bounds in NamedTrajectory
+        # They are optimization variables without explicit box constraints
+    end
+    
+    return NamedTrajectory(data; nt_kwargs...)
 end
 
 """
@@ -311,16 +379,27 @@ Convert an MultiKetTrajectory to a NamedTrajectory for optimization.
 # Keyword Arguments
 - `Δt_bounds`: Optional tuple `(lower, upper)` for timestep bounds. If provided,
   enables free-time optimization (minimum-time problems). Default: `nothing` (no bounds).
+- `global_data`: Optional Dict mapping global variable names to initial values
+- `global_bounds`: Optional Dict mapping global variable names to (lower, upper) bounds
 """
 function NamedTrajectory(
     qtraj::MultiKetTrajectory,
     N_or_times::Union{Int, AbstractVector{<:Real}};
-    Δt_bounds::Union{Nothing, Tuple{Float64, Float64}}=nothing
+    Δt_bounds::Union{Nothing, Tuple{Float64, Float64}}=nothing,
+    global_data::Union{Nothing, Dict{Symbol, <:AbstractVector}}=nothing,
+    global_bounds::Union{Nothing, Dict{Symbol, Tuple{Float64, Float64}}}=nothing
 )
     times = _sample_times(qtraj, N_or_times)
     T = length(times)
     n_states = length(qtraj)
     state_prefix = state_name(qtraj)
+    
+    # Auto-populate global_data from system if not provided
+    if isnothing(global_data) && !isempty(qtraj.system.global_params)
+        global_data = Dict(
+            name => [val] for (name, val) in pairs(qtraj.system.global_params)
+        )
+    end
     
     # Sample all ket states
     state_data = NamedTuple()
@@ -361,8 +440,8 @@ function NamedTrajectory(
         bounds = merge(bounds, (Δt = ([Δt_bounds[1]], [Δt_bounds[2]]),))
     end
     
-    return NamedTrajectory(
-        data;
+    # Build kwargs for NamedTrajectory constructor
+    nt_kwargs = (
         timestep=:Δt,
         controls=(:Δt, control_names...),
         bounds=bounds,
@@ -370,6 +449,29 @@ function NamedTrajectory(
         final=final_nt,
         goal=goal_nt
     )
+    
+    # Add global variables if provided
+    if !isnothing(global_data)
+        # Convert Dict{Symbol, Vector} to flat vector and components NamedTuple
+        global_names = sort(collect(keys(global_data)))  # Consistent ordering
+        global_vec = vcat([global_data[name] for name in global_names]...)
+        offset = 0
+        global_comps_list = []
+        for name in global_names
+            len = length(global_data[name])
+            push!(global_comps_list, name => (offset+1:offset+len))
+            offset += len
+        end
+        nt_kwargs = merge(nt_kwargs, (
+            global_data=global_vec,
+            global_components=NamedTuple(global_comps_list)
+        ))
+        
+        # Note: global_bounds are not used here - global variables don't have bounds in NamedTrajectory
+        # They are optimization variables without explicit box constraints
+    end
+    
+    return NamedTrajectory(data; nt_kwargs...)
 end
 
 """

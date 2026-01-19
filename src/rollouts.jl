@@ -59,6 +59,7 @@ export unitary_rollout
 export unitary_rollout_fidelity
 export open_rollout
 export open_rollout_fidelity
+export update_global_params!
 
 export KetODEProblem
 export KetOperatorODEProblem
@@ -69,8 +70,7 @@ export DensityODEProblem
 using LinearAlgebra
 using NamedTrajectories
 using DataInterpolations
-using OrdinaryDiffEqLinear: MagnusGL4
-using SciMLBase
+using OrdinaryDiffEqLinear
 using SymbolicIndexingInterface
 const SII = SymbolicIndexingInterface
 using TestItems
@@ -97,6 +97,83 @@ In-place rollout of quantum trajectory with new pulse or ODE parameters.
 Extended in quantum_trajectories module for specific trajectory types.
 """
 function rollout! end
+
+"""
+    update_global_params!(qtraj, traj::NamedTrajectory)
+
+Update the global parameters in the quantum trajectory's system with the optimized
+values from the NamedTrajectory after optimization. Handles immutable QuantumSystem
+by reconstructing with updated global_params NamedTuple.
+"""
+function update_global_params!(qtraj, traj)
+    # Extract optimized global values from trajectory
+    global_dict = Dict{Symbol, Float64}()
+    for (name, indices) in pairs(traj.global_components)
+        if length(indices) == 1
+            global_dict[name] = traj.global_data[indices[1]]
+        else
+            # Multi-dimensional globals (future support)
+            global_dict[name] = traj.global_data[indices]
+        end
+    end
+    
+    # Reconstruct system with updated global_params
+    sys = qtraj.system
+    new_global_params = NamedTuple(global_dict)
+    
+    # Create new system with updated global_params
+    new_sys = QuantumSystem(
+        sys.H_drift,
+        sys.H_drives,
+        sys.drive_bounds;
+        time_dependent=sys.time_dependent,
+        global_params=new_global_params
+    )
+    
+    # Update the quantum trajectory's system field (using internal method)
+    _update_system!(qtraj, new_sys)
+    
+    return nothing
+end
+
+"""
+    _update_system!(qtraj, sys::QuantumSystem)
+
+Internal method to update the system field in a quantum trajectory.
+Extended in quantum_trajectories module for specific trajectory types.
+"""
+function _update_system! end
+
+"""
+    extract_globals(traj::NamedTrajectory, names::Vector{Symbol}=Symbol[])
+
+Extract global variables from trajectory as a NamedTuple for easy access.
+If names is empty, extracts all global variables.
+
+# Example
+```julia
+traj = NamedTrajectory(...; global_data=[0.5, 1.0], global_components=(δ=1:1, Ω=2:2))
+g = extract_globals(traj)  # (δ = 0.5, Ω = 1.0)
+```
+"""
+function extract_globals(traj, names::Vector{Symbol}=Symbol[])
+    if isempty(names)
+        names = collect(keys(traj.global_components))
+    end
+    
+    global_dict = Dict{Symbol, Float64}()
+    for name in names
+        indices = traj.global_components[name]
+        if length(indices) == 1
+            global_dict[name] = traj.global_data[indices[1]]
+        else
+            # Multi-dimensional globals - return vector
+            global_dict[name] = traj.global_data[indices]
+        end
+    end
+    
+    return NamedTuple(global_dict)
+end
 
 # ------------------------------------------------------------ #
 # Fidelity
@@ -540,8 +617,7 @@ SII.is_observed(sys::PiccoloRolloutSystem, sym) = false
 # TODO: Test rollout fidelity (after adpating to new interface)
 
 @testitem "Test ket rollout symbolic interface" begin
-    using SciMLBase: solve
-    using OrdinaryDiffEqTsit5: Tsit5
+    using OrdinaryDiffEqTsit5
     
     T, Δt = 1.0, 0.1
     sys = QuantumSystem([PAULIS.X, PAULIS.Y], [1.0, 1.0])
@@ -566,8 +642,7 @@ SII.is_observed(sys::PiccoloRolloutSystem, sym) = false
 end
 
 @testitem "Test unitary rollout symbolic interface" begin
-    using SciMLBase: solve
-    using OrdinaryDiffEqLinear: MagnusGL4
+    using OrdinaryDiffEqLinear
 
     T, Δt = 1.0, 0.1
     sys = QuantumSystem([PAULIS.X, PAULIS.Y], [1.0, 1.0])
@@ -591,8 +666,7 @@ end
 end
 
 @testitem "Test density rollout symbolic interface" begin
-    using SciMLBase: solve
-    using OrdinaryDiffEqTsit5: Tsit5
+    using OrdinaryDiffEqTsit5
 
     T, Δt = 1.0, 0.1
     csys = QuantumSystem([PAULIS.X, PAULIS.Y], [1.0, 1.0])
@@ -621,9 +695,8 @@ end
 end
 
 @testitem "Rollout internal consistency (ket/unitary/density, closed system)" begin
-    using SciMLBase: solve
-    using OrdinaryDiffEqTsit5: Tsit5
-    using OrdinaryDiffEqLinear: MagnusGL4
+    using OrdinaryDiffEqTsit5
+    using OrdinaryDiffEqLinear
 
     T, Δt = 1.0, 0.1
     sys  = QuantumSystem([PAULIS.X, PAULIS.Y], [1.0, 1.0])
@@ -654,9 +727,8 @@ end
 end
 
 @testitem "Rollouts with all Pulse types" begin
-    using SciMLBase: solve
-    using OrdinaryDiffEqTsit5: Tsit5
-    using OrdinaryDiffEqLinear: MagnusGL4
+    using OrdinaryDiffEqTsit5
+    using OrdinaryDiffEqLinear
 
     T, Δt = 1.0, 0.1
     sys = QuantumSystem([PAULIS.X, PAULIS.Y], [1.0, 1.0])
@@ -709,9 +781,8 @@ end
 end
 
 @testitem "Rollouts with GaussianPulse" begin
-    using SciMLBase: solve
-    using OrdinaryDiffEqTsit5: Tsit5
-    using OrdinaryDiffEqLinear: MagnusGL4
+    using OrdinaryDiffEqTsit5
+    using OrdinaryDiffEqLinear
 
     T = 1.0
     Δt = 0.1
@@ -757,8 +828,7 @@ end
 end
 
 @testitem "Two ways to check fidelity" begin
-    using SciMLBase: solve
-    using OrdinaryDiffEqLinear: MagnusGL4
+    using OrdinaryDiffEqLinear
     using NamedTrajectories
 
     # Setup
@@ -820,6 +890,82 @@ end
     # Roll out with custom resolution
     qtraj3 = rollout(qtraj1, pulse2; n_points=501)
     @test length(qtraj3.solution.u) == 501
+end
+
+@testitem "Global parameter updates" begin
+    using PiccoloQuantumObjects
+    using LinearAlgebra
+    using NamedTrajectories
+    
+    # Create a system with global parameters
+    H_drives = [PAULIS[:X], PAULIS[:Y]]
+    global_params = (δ = 0.5, Ω = 1.0)
+    sys = QuantumSystem(H_drives, [1.0, 1.0]; global_params=global_params)
+    
+    # Create a unitary trajectory (2 drives × 2 timesteps)
+    pulse = ZeroOrderPulse([0.5 0.3; 0.5 0.3], [0.0, 1.0])
+    U_goal = PAULIS[:X]
+    qtraj = UnitaryTrajectory(sys, pulse, U_goal)
+    
+    # Verify initial global parameters
+    @test qtraj.system.global_params.δ == 0.5
+    @test qtraj.system.global_params.Ω == 1.0
+    
+    # Create a NamedTrajectory with different global values
+    traj = NamedTrajectory(
+        (u = rand(2, 10), Δt = fill(0.1, 10));
+        timestep = :Δt,
+        global_data = [0.8, 1.5],
+        global_components = (δ = 1:1, Ω = 2:2)
+    )
+    
+    # Update global parameters
+    Rollouts.update_global_params!(qtraj, traj)
+    
+    # Verify updated values
+    @test qtraj.system.global_params.δ == 0.8
+    @test qtraj.system.global_params.Ω == 1.5
+    
+    # Verify system structure preserved
+    @test qtraj.system.n_drives == 2
+    @test qtraj.system.levels == 2
+    @test length(qtraj.system.H_drives) == 2
+    
+    # Test with KetTrajectory
+    ψ_init = ComplexF64[1.0, 0.0]
+    ψ_goal = ComplexF64[0.0, 1.0]
+    qtraj_ket = KetTrajectory(sys, pulse, ψ_init, ψ_goal)
+    
+    Rollouts.update_global_params!(qtraj_ket, traj)
+    @test qtraj_ket.system.global_params.δ == 0.8
+    @test qtraj_ket.system.global_params.Ω == 1.5
+end
+
+@testitem "extract_globals utility" begin
+    using PiccoloQuantumObjects
+    using NamedTrajectories
+    
+    # Create trajectory with globals
+    traj = NamedTrajectory(
+        (u = rand(2, 10), Δt = fill(0.1, 10));
+        timestep = :Δt,
+        global_data = [0.8, 1.5, 2.0],
+        global_components = (δ = 1:1, Ω = 2:2, α = 3:3)
+    )
+    
+    # Extract all globals
+    g_all = Rollouts.extract_globals(traj)
+    @test g_all isa NamedTuple
+    @test g_all.δ == 0.8
+    @test g_all.Ω == 1.5
+    @test g_all.α == 2.0
+    
+    # Extract specific globals
+    g_partial = Rollouts.extract_globals(traj, [:δ, :Ω])
+    @test g_partial isa NamedTuple
+    @test g_partial.δ == 0.8
+    @test g_partial.Ω == 1.5
+    @test !haskey(g_partial, :α)
 end
 
 
