@@ -1,9 +1,8 @@
 module QuantumTrajectories
 
 using LinearAlgebra
-using SciMLBase: ODESolution, solve, remake, EnsembleProblem
-using OrdinaryDiffEqLinear: MagnusGL4
-using OrdinaryDiffEqTsit5: Tsit5
+using OrdinaryDiffEqLinear
+using OrdinaryDiffEqTsit5
 using TestItems
 
 using ..QuantumSystems: AbstractQuantumSystem, QuantumSystem, OpenQuantumSystem
