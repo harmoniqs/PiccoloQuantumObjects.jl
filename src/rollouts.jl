@@ -127,15 +127,22 @@ function update_global_params!(qtraj, traj)
     new_global_params = NamedTuple(global_dict)
     
     # Choose reconstruction strategy based on how the system was originally constructed
-    # For function-based systems, H_drives is empty and we cannot reconstruct from matrices
+    # For function-based systems, H_drives is empty. We cannot reconstruct from the 
+    # original H function, but we can update the stored global_params field.
     if isempty(sys.H_drives)
-        # Function-based system: we cannot reconstruct from the original H function
-        # since we don't have access to it. Instead, create a wrapper that modifies
-        # the existing H and G functions to use new global_params
-        # This is a limitation - ideally we'd reconstruct properly
-        error(
-            "update_global_params! not yet supported for function-based QuantumSystems. " *
-            "For function-based systems, manually reconstruct the system with new global_params."
+        # Function-based system: directly update global_params field
+        # Note: The H function won't automatically see these new values unless it
+        # was designed to read from sys.global_params (e.g., via a reference)
+        new_sys = QuantumSystem(
+            sys.H,
+            sys.G,
+            sys.H_drift,
+            sys.H_drives,
+            sys.drive_bounds,
+            sys.n_drives,
+            sys.levels,
+            sys.time_dependent,
+            new_global_params
         )
     else
         # Matrix-based system: reconstruct from drift and drives
