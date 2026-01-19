@@ -810,14 +810,14 @@ end
     result = _add_global_data_to_kwargs(nt_kwargs, global_data)
     @test haskey(result, :global_data)
     @test haskey(result, :global_components)
-    @test result.global_data == [1.0, 0.5]  # Sorted alphabetically: Ω, δ
+    @test result.global_data == [1.0, 0.5]  # Sorted by Symbol (Unicode codepoint): Ω, δ
     @test result.global_components.Ω == 1:1
     @test result.global_components.δ == 2:2
     
     # Test with multi-dimensional globals
     global_data_multi = Dict(:δ => [0.5], :α => [1.0, 2.0, 3.0], :Ω => [1.5])
     result = _add_global_data_to_kwargs(nt_kwargs, global_data_multi)
-    @test result.global_data == [1.5, 1.0, 2.0, 3.0, 0.5]  # Sorted: Ω, α, δ
+    @test result.global_data == [1.5, 1.0, 2.0, 3.0, 0.5]  # Sorted by Symbol (Unicode codepoint): Ω, α, δ
     @test result.global_components.Ω == 1:1
     @test result.global_components.α == 2:4
     @test result.global_components.δ == 5:5

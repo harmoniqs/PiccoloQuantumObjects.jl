@@ -55,6 +55,8 @@ Construct a QuantumSystem from a Hamiltonian function.
 
 # Keyword Arguments
 - `time_dependent::Bool=false`: Set to `true` if the Hamiltonian has explicit time dependence (e.g., cos(ωt) modulation)
+- `global_params::NamedTuple=NamedTuple()`: Global parameters to store with the system. For function-based systems,
+  access these via closure in your H function: `H(u, t) = global_params.δ * ...` where `global_params` is captured from outer scope.
 
 # Example
 ```julia
@@ -86,8 +88,8 @@ function QuantumSystem(
     @assert is_hermitian(H_test) "Hamiltonian H(u, t=0) is not Hermitian for test control values u=$u_test"
 
     return QuantumSystem(
-        (u, t; g=nothing) -> H(u, t; g=g),
-        (u, t; g=nothing) -> Isomorphisms.G(H(u, t; g=g)),
+        (u, t; g=nothing) -> H(u, t),
+        (u, t; g=nothing) -> Isomorphisms.G(H(u, t)),
         sparse(H_drift),
         Vector{SparseMatrixCSC{ComplexF64, Int}}(),  # Empty drives vector for function-based systems
         drive_bounds,
@@ -117,6 +119,8 @@ Construct a QuantumSystem from drift and drive Hamiltonian terms.
 
 # Keyword Arguments
 - `time_dependent::Bool=false`: Set to `true` if using time-dependent modulation (typically handled at a higher level)
+- `global_params::NamedTuple=NamedTuple()`: Global parameters stored with the system. Note: for matrix-based systems,
+  matrices are fixed at construction, so global_params are mainly for storage/bookkeeping and later updates via `update_global_params!`
 
 The resulting Hamiltonian is: H(u, t) = H_drift + Σᵢ uᵢ * H_drives[i]
 
@@ -155,8 +159,6 @@ function QuantumSystem(
     H_drives = sparse.(H_drives)
     G_drives = sparse.(Isomorphisms.G.(H_drives))
 
-    # g parameter exists for interface consistency with function-based systems
-    # For matrix-based systems, matrices are fixed at construction so g has no effect
     if n_drives == 0
         H = (u, t; g=nothing) -> H_drift
         G = (u, t; g=nothing) -> G_drift 
@@ -384,14 +386,15 @@ end
     sys3 = QuantumSystem(H, [1.0, 1.0]; global_params=(β = 2.5,))
     @test sys3.global_params.β == 2.5
     
-    # Test that function-based system passes g parameter to user's H
-    # User H can now optionally accept g parameter for global params
-    H_with_g(u, t; g=nothing) = (isnothing(g) ? 1.0 : g.scale) * (u[1] * PAULIS[:X] + u[2] * PAULIS[:Y])
-    sys4 = QuantumSystem(H_with_g, [1.0, 1.0]; global_params=(scale = 2.0,))
+    # Test that function-based system can use global params via closure
+    # Users should capture global_params in their H function definition
+    gp = (scale = 2.0,)
+    H_with_global(u, t) = gp.scale * (u[1] * PAULIS[:X] + u[2] * PAULIS[:Y])
+    sys4 = QuantumSystem(H_with_global, [1.0, 1.0]; global_params=gp)
     @test sys4.global_params.scale == 2.0
-    # Verify H function receives g parameter
+    # Verify H function uses the global parameter via closure
     u_test = [0.5, 0.5]
-    H_no_g = sys4.H(u_test, 0.0)  # Without g, should use scale=1.0 (default)
-    H_with_g_val = sys4.H(u_test, 0.0; g=(scale=2.0,))  # With g, should scale by 2
-    @test norm(H_with_g_val - 2.0 * H_no_g) < 1e-10
+    H_result = sys4.H(u_test, 0.0)
+    H_expected = 2.0 * (0.5 * PAULIS[:X] + 0.5 * PAULIS[:Y])
+    @test norm(H_result - H_expected) < 1e-10
 end
