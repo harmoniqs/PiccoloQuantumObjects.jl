@@ -86,10 +86,8 @@ function QuantumSystem(
     @assert is_hermitian(H_test) "Hamiltonian H(u, t=0) is not Hermitian for test control values u=$u_test"
 
     return QuantumSystem(
-        # Note: g parameter exists for interface consistency but is not passed to user's H
-        # If your Hamiltonian needs global parameters, access them via closure or pass them explicitly
-        (u, t; g=nothing) -> H(u, t),
-        (u, t; g=nothing) -> Isomorphisms.G(H(u, t)),
+        (u, t; g=nothing) -> H(u, t; g=g),
+        (u, t; g=nothing) -> Isomorphisms.G(H(u, t; g=g)),
         sparse(H_drift),
         Vector{SparseMatrixCSC{ComplexF64, Int}}(),  # Empty drives vector for function-based systems
         drive_bounds,
@@ -157,8 +155,8 @@ function QuantumSystem(
     H_drives = sparse.(H_drives)
     G_drives = sparse.(Isomorphisms.G.(H_drives))
 
-    # Note: g parameter exists for interface consistency but is not used for matrix-based systems
-    # since the matrices are fixed at construction time
+    # g parameter exists for interface consistency with function-based systems
+    # For matrix-based systems, matrices are fixed at construction so g has no effect
     if n_drives == 0
         H = (u, t; g=nothing) -> H_drift
         G = (u, t; g=nothing) -> G_drift 
@@ -385,4 +383,15 @@ end
     H(u, p) = u[1] * PAULIS[:X] + u[2] * PAULIS[:Y]
     sys3 = QuantumSystem(H, [1.0, 1.0]; global_params=(β = 2.5,))
     @test sys3.global_params.β == 2.5
+    
+    # Test that function-based system passes g parameter to user's H
+    # User H can now optionally accept g parameter for global params
+    H_with_g(u, t; g=nothing) = (isnothing(g) ? 1.0 : g.scale) * (u[1] * PAULIS[:X] + u[2] * PAULIS[:Y])
+    sys4 = QuantumSystem(H_with_g, [1.0, 1.0]; global_params=(scale = 2.0,))
+    @test sys4.global_params.scale == 2.0
+    # Verify H function receives g parameter
+    u_test = [0.5, 0.5]
+    H_no_g = sys4.H(u_test, 0.0)  # Without g, should use scale=1.0 (default)
+    H_with_g_val = sys4.H(u_test, 0.0; g=(scale=2.0,))  # With g, should scale by 2
+    @test norm(H_with_g_val - 2.0 * H_no_g) < 1e-10
 end
