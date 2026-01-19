@@ -86,6 +86,8 @@ function QuantumSystem(
     @assert is_hermitian(H_test) "Hamiltonian H(u, t=0) is not Hermitian for test control values u=$u_test"
 
     return QuantumSystem(
+        # Note: g parameter exists for interface consistency but is not passed to user's H
+        # If your Hamiltonian needs global parameters, access them via closure or pass them explicitly
         (u, t; g=nothing) -> H(u, t),
         (u, t; g=nothing) -> Isomorphisms.G(H(u, t)),
         sparse(H_drift),
@@ -155,6 +157,8 @@ function QuantumSystem(
     H_drives = sparse.(H_drives)
     G_drives = sparse.(Isomorphisms.G.(H_drives))
 
+    # Note: g parameter exists for interface consistency but is not used for matrix-based systems
+    # since the matrices are fixed at construction time
     if n_drives == 0
         H = (u, t; g=nothing) -> H_drift
         G = (u, t; g=nothing) -> G_drift 

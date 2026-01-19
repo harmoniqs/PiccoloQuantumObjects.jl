@@ -106,8 +106,13 @@ values from the NamedTrajectory after optimization. Handles immutable QuantumSys
 by reconstructing with updated global_params NamedTuple.
 """
 function update_global_params!(qtraj, traj)
+    # Check if trajectory has global components
+    if !hasfield(typeof(traj), :global_components) || isempty(traj.global_components)
+        return nothing
+    end
+    
     # Extract optimized global values from trajectory
-    global_dict = Dict{Symbol, Float64}()
+    global_dict = Dict{Symbol, Any}()
     for (name, indices) in pairs(traj.global_components)
         if length(indices) == 1
             global_dict[name] = traj.global_data[indices[1]]
@@ -157,11 +162,16 @@ g = extract_globals(traj)  # (δ = 0.5, Ω = 1.0)
 ```
 """
 function extract_globals(traj, names::Vector{Symbol}=Symbol[])
+    # Check if trajectory has global components
+    if !hasfield(typeof(traj), :global_components) || isempty(traj.global_components)
+        return NamedTuple()
+    end
+    
     if isempty(names)
         names = collect(keys(traj.global_components))
     end
     
-    global_dict = Dict{Symbol, Float64}()
+    global_dict = Dict{Symbol, Any}()
     for name in names
         indices = traj.global_components[name]
         if length(indices) == 1
@@ -966,6 +976,60 @@ end
     @test g_partial.δ == 0.8
     @test g_partial.Ω == 1.5
     @test !haskey(g_partial, :α)
+    
+    # Test with trajectory without global components (edge case)
+    traj_no_globals = NamedTrajectory(
+        (u = rand(2, 10), Δt = fill(0.1, 10));
+        timestep = :Δt
+    )
+    g_empty = Rollouts.extract_globals(traj_no_globals)
+    @test g_empty isa NamedTuple
+    @test isempty(g_empty)
+end
+
+@testitem "Multi-dimensional global parameters" begin
+    using PiccoloQuantumObjects
+    using NamedTrajectories
+    
+    # Test extract_globals with multi-dimensional globals
+    traj = NamedTrajectory(
+        (u = rand(2, 10), Δt = fill(0.1, 10));
+        timestep = :Δt,
+        global_data = [0.8, 1.5, 2.0, 3.0],  # Two scalars and one 2D vector
+        global_components = (δ = 1:1, Ω = 2:2, α = 3:4)
+    )
+    
+    g = Rollouts.extract_globals(traj)
+    @test g.δ == 0.8
+    @test g.Ω == 1.5
+    @test g.α isa Vector
+    @test g.α == [2.0, 3.0]
+end
+
+@testitem "update_global_params! edge cases" begin
+    using PiccoloQuantumObjects
+    using NamedTrajectories
+    
+    # Create a system with global parameters
+    H_drives = [PAULIS[:X], PAULIS[:Y]]
+    global_params = (δ = 0.5, Ω = 1.0)
+    sys = QuantumSystem(H_drives, [1.0, 1.0]; global_params=global_params)
+    pulse = ZeroOrderPulse([0.5 0.3; 0.5 0.3], [0.0, 1.0])
+    U_goal = PAULIS[:X]
+    qtraj = UnitaryTrajectory(sys, pulse, U_goal)
+    
+    # Test with trajectory without global components (should not error)
+    traj_no_globals = NamedTrajectory(
+        (u = rand(2, 10), Δt = fill(0.1, 10));
+        timestep = :Δt
+    )
+    
+    # Should return nothing without error
+    result = Rollouts.update_global_params!(qtraj, traj_no_globals)
+    @test result === nothing
+    # Original global params should be unchanged
+    @test qtraj.system.global_params.δ == 0.5
+    @test qtraj.system.global_params.Ω == 1.0
 end
 
 

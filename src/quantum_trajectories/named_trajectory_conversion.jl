@@ -33,6 +33,41 @@ Return times as a Float64 vector.
 _sample_times(traj, times::AbstractVector{<:Real}) = collect(Float64, times)
 
 """
+    _add_global_data_to_kwargs(nt_kwargs, global_data)
+
+Helper function to process global variables and add them to NamedTrajectory kwargs.
+Converts Dict{Symbol, Vector} to flat vector and components NamedTuple.
+
+# Arguments
+- `nt_kwargs`: Existing NamedTuple of kwargs to merge with
+- `global_data`: Dict mapping global variable names to vectors of values
+
+# Returns
+Merged NamedTuple with global_data and global_components added
+"""
+function _add_global_data_to_kwargs(nt_kwargs, global_data)
+    if isnothing(global_data)
+        return nt_kwargs
+    end
+    
+    # Convert Dict{Symbol, Vector} to flat vector and components NamedTuple
+    global_names = sort(collect(keys(global_data)))  # Consistent ordering
+    global_vec = vcat([global_data[name] for name in global_names]...)
+    offset = 0
+    global_comps_list = []
+    for name in global_names
+        len = length(global_data[name])
+        push!(global_comps_list, name => (offset+1:offset+len))
+        offset += len
+    end
+    
+    return merge(nt_kwargs, (
+        global_data=global_vec,
+        global_components=NamedTuple(global_comps_list)
+    ))
+end
+
+"""
     _get_drive_bounds(sys::QuantumSystem)
 
 Extract drive bounds from system as tuple of (lower, upper) vectors.
@@ -167,8 +202,8 @@ for time-dependent integrators used with `SplinePulseProblem`.
 # Keyword Arguments
 - `Δt_bounds`: Optional tuple `(lower, upper)` for timestep bounds. If provided,
   enables free-time optimization (minimum-time problems). Default: `nothing` (no bounds).
-- `global_data`: Optional Dict mapping global variable names to initial values
-- `global_bounds`: Optional Dict mapping global variable names to (lower, upper) bounds
+- `global_data`: Optional Dict mapping global variable names to initial values (as vectors).
+  Note: global variables are optimization variables without explicit box constraints.
 
 # Returns
 A NamedTrajectory suitable for direct collocation optimization.
@@ -177,8 +212,7 @@ function NamedTrajectory(
     qtraj::UnitaryTrajectory,
     N_or_times::Union{Int, AbstractVector{<:Real}};
     Δt_bounds::Union{Nothing, Tuple{Float64, Float64}}=nothing,
-    global_data::Union{Nothing, Dict{Symbol, <:AbstractVector}}=nothing,
-    global_bounds::Union{Nothing, Dict{Symbol, Tuple{Float64, Float64}}}=nothing
+    global_data::Union{Nothing, Dict{Symbol, <:AbstractVector}}=nothing
 )
     times = _sample_times(qtraj, N_or_times)
     T = length(times)
@@ -253,9 +287,6 @@ function NamedTrajectory(
             global_data=global_vec,
             global_components=NamedTuple(global_comps_list)
         ))
-        
-        # Note: global_bounds are not used here - global variables don't have bounds in NamedTrajectory
-        # They are optimization variables without explicit box constraints
     end
     
     return NamedTrajectory(data; nt_kwargs...)
@@ -276,15 +307,14 @@ Convert a KetTrajectory to a NamedTrajectory for optimization.
 # Keyword Arguments
 - `Δt_bounds`: Optional tuple `(lower, upper)` for timestep bounds. If provided,
   enables free-time optimization (minimum-time problems). Default: `nothing` (no bounds).
-- `global_data`: Optional Dict mapping global variable names to initial values
-- `global_bounds`: Optional Dict mapping global variable names to (lower, upper) bounds
+- `global_data`: Optional Dict mapping global variable names to initial values (as vectors).
+  Note: global variables are optimization variables without explicit box constraints.
 """
 function NamedTrajectory(
     qtraj::KetTrajectory,
     N_or_times::Union{Int, AbstractVector{<:Real}};
     Δt_bounds::Union{Nothing, Tuple{Float64, Float64}}=nothing,
-    global_data::Union{Nothing, Dict{Symbol, <:AbstractVector}}=nothing,
-    global_bounds::Union{Nothing, Dict{Symbol, Tuple{Float64, Float64}}}=nothing
+    global_data::Union{Nothing, Dict{Symbol, <:AbstractVector}}=nothing
 )
     times = _sample_times(qtraj, N_or_times)
     T = length(times)
@@ -341,25 +371,7 @@ function NamedTrajectory(
     )
     
     # Add global variables if provided
-    if !isnothing(global_data)
-        # Convert Dict{Symbol, Vector} to flat vector and components NamedTuple
-        global_names = sort(collect(keys(global_data)))  # Consistent ordering
-        global_vec = vcat([global_data[name] for name in global_names]...)
-        offset = 0
-        global_comps_list = []
-        for name in global_names
-            len = length(global_data[name])
-            push!(global_comps_list, name => (offset+1:offset+len))
-            offset += len
-        end
-        nt_kwargs = merge(nt_kwargs, (
-            global_data=global_vec,
-            global_components=NamedTuple(global_comps_list)
-        ))
-        
-        # Note: global_bounds are not used here - global variables don't have bounds in NamedTrajectory
-        # They are optimization variables without explicit box constraints
-    end
+    nt_kwargs = _add_global_data_to_kwargs(nt_kwargs, global_data)
     
     return NamedTrajectory(data; nt_kwargs...)
 end
@@ -379,15 +391,14 @@ Convert an MultiKetTrajectory to a NamedTrajectory for optimization.
 # Keyword Arguments
 - `Δt_bounds`: Optional tuple `(lower, upper)` for timestep bounds. If provided,
   enables free-time optimization (minimum-time problems). Default: `nothing` (no bounds).
-- `global_data`: Optional Dict mapping global variable names to initial values
-- `global_bounds`: Optional Dict mapping global variable names to (lower, upper) bounds
+- `global_data`: Optional Dict mapping global variable names to initial values (as vectors).
+  Note: global variables are optimization variables without explicit box constraints.
 """
 function NamedTrajectory(
     qtraj::MultiKetTrajectory,
     N_or_times::Union{Int, AbstractVector{<:Real}};
     Δt_bounds::Union{Nothing, Tuple{Float64, Float64}}=nothing,
-    global_data::Union{Nothing, Dict{Symbol, <:AbstractVector}}=nothing,
-    global_bounds::Union{Nothing, Dict{Symbol, Tuple{Float64, Float64}}}=nothing
+    global_data::Union{Nothing, Dict{Symbol, <:AbstractVector}}=nothing
 )
     times = _sample_times(qtraj, N_or_times)
     T = length(times)
@@ -451,25 +462,7 @@ function NamedTrajectory(
     )
     
     # Add global variables if provided
-    if !isnothing(global_data)
-        # Convert Dict{Symbol, Vector} to flat vector and components NamedTuple
-        global_names = sort(collect(keys(global_data)))  # Consistent ordering
-        global_vec = vcat([global_data[name] for name in global_names]...)
-        offset = 0
-        global_comps_list = []
-        for name in global_names
-            len = length(global_data[name])
-            push!(global_comps_list, name => (offset+1:offset+len))
-            offset += len
-        end
-        nt_kwargs = merge(nt_kwargs, (
-            global_data=global_vec,
-            global_components=NamedTuple(global_comps_list)
-        ))
-        
-        # Note: global_bounds are not used here - global variables don't have bounds in NamedTrajectory
-        # They are optimization variables without explicit box constraints
-    end
+    nt_kwargs = _add_global_data_to_kwargs(nt_kwargs, global_data)
     
     return NamedTrajectory(data; nt_kwargs...)
 end
@@ -800,4 +793,79 @@ end
     @test haskey(traj.bounds, :Δt)
     @test traj.bounds[:Δt][1] == [0.05]
     @test traj.bounds[:Δt][2] == [0.2]
+end
+
+@testitem "_add_global_data_to_kwargs helper" begin
+    using PiccoloQuantumObjects.QuantumTrajectories: _add_global_data_to_kwargs
+    
+    # Test with nothing (should return unchanged)
+    nt_kwargs = (timestep=:Δt, controls=(:u,))
+    result = _add_global_data_to_kwargs(nt_kwargs, nothing)
+    @test result === nt_kwargs
+    @test !haskey(result, :global_data)
+    @test !haskey(result, :global_components)
+    
+    # Test with single-dimensional globals
+    global_data = Dict(:δ => [0.5], :Ω => [1.0])
+    result = _add_global_data_to_kwargs(nt_kwargs, global_data)
+    @test haskey(result, :global_data)
+    @test haskey(result, :global_components)
+    @test result.global_data == [1.0, 0.5]  # Sorted alphabetically: Ω, δ
+    @test result.global_components.Ω == 1:1
+    @test result.global_components.δ == 2:2
+    
+    # Test with multi-dimensional globals
+    global_data_multi = Dict(:δ => [0.5], :α => [1.0, 2.0, 3.0], :Ω => [1.5])
+    result = _add_global_data_to_kwargs(nt_kwargs, global_data_multi)
+    @test result.global_data == [1.5, 1.0, 2.0, 3.0, 0.5]  # Sorted: Ω, α, δ
+    @test result.global_components.Ω == 1:1
+    @test result.global_components.α == 2:4
+    @test result.global_components.δ == 5:5
+    
+    # Verify original kwargs are preserved
+    @test result.timestep == :Δt
+    @test result.controls == (:u,)
+end
+
+@testitem "NamedTrajectory with global_data parameter" begin
+    using PiccoloQuantumObjects
+    using NamedTrajectories
+    
+    # Create a system with global parameters
+    H_drives = [PAULIS[:X], PAULIS[:Y]]
+    sys = QuantumSystem(H_drives, [1.0, 1.0]; global_params=(δ=0.5, Ω=1.0))
+    
+    # Create trajectory
+    pulse = ZeroOrderPulse([0.5 0.3; 0.5 0.3], [0.0, 1.0])
+    U_goal = PAULIS[:X]
+    qtraj = UnitaryTrajectory(sys, pulse, U_goal)
+    
+    # Convert to NamedTrajectory - should auto-populate from system.global_params
+    traj_auto = NamedTrajectory(qtraj, 5)
+    @test hasfield(typeof(traj_auto), :global_components)
+    @test haskey(traj_auto.global_components, :δ)
+    @test haskey(traj_auto.global_components, :Ω)
+    @test traj_auto.global_data[traj_auto.global_components.δ][1] == 0.5
+    @test traj_auto.global_data[traj_auto.global_components.Ω][1] == 1.0
+    
+    # Convert with explicit global_data (should override system.global_params)
+    custom_global = Dict(:δ => [0.8], :Ω => [1.5])
+    traj_custom = NamedTrajectory(qtraj, 5; global_data=custom_global)
+    @test traj_custom.global_data[traj_custom.global_components.δ][1] == 0.8
+    @test traj_custom.global_data[traj_custom.global_components.Ω][1] == 1.5
+    
+    # Test with KetTrajectory
+    ψ_init = ComplexF64[1.0, 0.0]
+    ψ_goal = ComplexF64[0.0, 1.0]
+    qtraj_ket = KetTrajectory(sys, pulse, ψ_init, ψ_goal)
+    traj_ket = NamedTrajectory(qtraj_ket, 5)
+    @test hasfield(typeof(traj_ket), :global_components)
+    @test traj_ket.global_data[traj_ket.global_components.δ][1] == 0.5
+    
+    # Test with system without global_params
+    sys_no_globals = QuantumSystem(H_drives, [1.0, 1.0])
+    qtraj_no_g = UnitaryTrajectory(sys_no_globals, pulse, U_goal)
+    traj_no_g = NamedTrajectory(qtraj_no_g, 5)
+    # Should work without error, just no global components
+    @test !hasfield(typeof(traj_no_g), :global_components) || isempty(traj_no_g.global_components)
 end

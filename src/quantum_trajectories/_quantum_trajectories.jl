@@ -1,7 +1,6 @@
 module QuantumTrajectories
 
 using LinearAlgebra
-# using SciMLBase: ODESolution, solve, remake, EnsembleProblem
 using OrdinaryDiffEqLinear
 using OrdinaryDiffEqTsit5
 using TestItems
