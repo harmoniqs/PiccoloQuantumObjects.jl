@@ -382,7 +382,7 @@ end
     @test sys2.global_params.α == -0.2
     
     # Test with function-based constructor
-    H(u, p) = u[1] * PAULIS[:X] + u[2] * PAULIS[:Y]
+    H(u, t) = u[1] * PAULIS[:X] + u[2] * PAULIS[:Y]
     sys3 = QuantumSystem(H, [1.0, 1.0]; global_params=(β = 2.5,))
     @test sys3.global_params.β == 2.5
     
