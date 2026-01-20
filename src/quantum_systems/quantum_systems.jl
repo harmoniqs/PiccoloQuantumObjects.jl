@@ -48,15 +48,18 @@ end
 Construct a QuantumSystem from a Hamiltonian function.
 
 # Arguments
-- `H::Function`: Hamiltonian function with signature (u, t) -> H(u, t) where u is the control vector and t is time
+- `H::Function`: Hamiltonian function with signature (u, t) -> H(u, t) where:
+  - `u` is a vector containing [controls..., globals...] (if system has global parameters)
+  - For matrix-based systems, only the first n_drives elements are used for controls
+  - For function-based systems, handle globals via closure or by accessing u beyond control indices
+  - `t` is time
 - `drive_bounds::DriveBounds`: Drive amplitude bounds for each control. Can be:
   - Tuples `(lower, upper)` for asymmetric bounds
   - Scalars which are interpreted as symmetric bounds `(-value, value)`
 
 # Keyword Arguments
 - `time_dependent::Bool=false`: Set to `true` if the Hamiltonian has explicit time dependence (e.g., cos(ωt) modulation)
-- `global_params::NamedTuple=NamedTuple()`: Global parameters to store with the system. For function-based systems,
-  access these via closure in your H function: `H(u, t) = global_params.δ * ...` where `global_params` is captured from outer scope.
+- `global_params::NamedTuple=NamedTuple()`: Global parameters stored with the system for bookkeeping
 
 # Example
 ```julia
@@ -74,22 +77,27 @@ function QuantumSystem(
     drive_bounds = normalize_drive_bounds(drive_bounds)
 
     n_drives = length(drive_bounds)
+    n_globals = length(global_params)
 
-    # Extract drift by evaluating with zero controls
-    H_drift = H(zeros(n_drives), 0.0)
+    # Build test vector u = [controls..., globals...]
+    u_zeros = n_globals > 0 ? vcat(zeros(n_drives), collect(values(global_params))) : zeros(n_drives)
+    
+    # Extract drift by evaluating with zero controls (and initial globals if present)
+    H_drift = H(u_zeros, 0.0)
     levels = size(H_drift, 1)
     
     # Check that H_drift is Hermitian
     @assert is_hermitian(H_drift) "Drift Hamiltonian H(u=0, t=0) is not Hermitian"
     
     # Check that Hamiltonian is Hermitian for sample control values
-    u_test = [b isa Tuple ? (b[1] + b[2])/2 : 0.0 for b in drive_bounds]
+    u_test_controls = [b isa Tuple ? (b[1] + b[2])/2 : 0.0 for b in drive_bounds]
+    u_test = n_globals > 0 ? vcat(u_test_controls, collect(values(global_params))) : u_test_controls
     H_test = H(u_test, 0.0)
     @assert is_hermitian(H_test) "Hamiltonian H(u, t=0) is not Hermitian for test control values u=$u_test"
 
     return QuantumSystem(
-        (u, t; g=nothing) -> H(u, t),
-        (u, t; g=nothing) -> Isomorphisms.G(H(u, t)),
+        (u, t) -> H(u, t),
+        (u, t) -> Isomorphisms.G(H(u, t)),
         sparse(H_drift),
         Vector{SparseMatrixCSC{ComplexF64, Int}}(),  # Empty drives vector for function-based systems
         drive_bounds,
@@ -159,12 +167,14 @@ function QuantumSystem(
     H_drives = sparse.(H_drives)
     G_drives = sparse.(Isomorphisms.G.(H_drives))
 
+    # Note: u may contain [controls..., globals...] where globals are extra elements beyond n_drives
+    # The integrator handles splitting u appropriately
     if n_drives == 0
-        H = (u, t; g=nothing) -> H_drift
-        G = (u, t; g=nothing) -> G_drift 
+        H = (u, t) -> H_drift
+        G = (u, t) -> G_drift 
     else
-        H = (u, t; g=nothing) -> H_drift + sum(u .* H_drives)
-        G = (u, t; g=nothing) -> G_drift + sum(u .* G_drives)
+        H = (u, t) -> H_drift + sum(view(u, 1:n_drives) .* H_drives)
+        G = (u, t) -> G_drift + sum(view(u, 1:n_drives) .* G_drives)
     end
 
     levels = size(H_drift, 1)
