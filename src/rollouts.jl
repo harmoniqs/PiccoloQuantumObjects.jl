@@ -304,17 +304,34 @@ end
 
 function _construct_operator(sys::AbstractQuantumSystem, u::F) where F
     A0 = zeros(ComplexF64, sys.levels, sys.levels)
+    
+    # Build u_vec function that appends globals to controls
+    if length(sys.global_params) > 0
+        global_vals = collect(values(sys.global_params))
+        u_vec = t -> vcat(u(t), global_vals)
+    else
+        u_vec = u  # No globals, use controls directly
+    end
+    
     function update!(A, x, p, t)
-        Ht = collect(sys.H(u(t), t))
+        Ht = collect(sys.H(u_vec(t), t))
         @. A = -im * Ht
         return nothing
     end
     return SciMLOperators.MatrixOperator(A0; update_func! = update!)
 end
 
-function _construct_rhs(sys::AbstractQuantumSystem, u::F) where F 
+function _construct_rhs(sys::AbstractQuantumSystem, u::F) where F
+    # Build u_vec function that appends globals to controls
+    if length(sys.global_params) > 0
+        global_vals = collect(values(sys.global_params))
+        u_vec = t -> vcat(u(t), global_vals)
+    else
+        u_vec = u  # No globals, use controls directly
+    end
+    
     function rhs!(dx, x, p, t)
-        mul!(dx, sys.H(u(t), t), x, -im, 0.0)
+        mul!(dx, sys.H(u_vec(t), t), x, -im, 0.0)
         return nothing
     end
     return rhs!
