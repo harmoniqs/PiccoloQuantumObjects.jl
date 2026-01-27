@@ -264,6 +264,43 @@ end
 evaluate(p::CubicSplinePulse, t) = p.controls(t)
 
 # ============================================================================ #
+# Spline pulse knot accessors
+# ============================================================================ #
+
+"""
+    get_knot_times(pulse::AbstractSplinePulse)
+
+Return the knot times stored in the spline pulse interpolant.
+"""
+get_knot_times(p::LinearSplinePulse) = p.controls.t
+get_knot_times(p::CubicSplinePulse) = p.controls.t
+
+"""
+    get_knot_count(pulse::AbstractSplinePulse)
+
+Return the number of knots in the spline pulse.
+"""
+get_knot_count(p::AbstractSplinePulse) = length(get_knot_times(p))
+
+"""
+    get_knot_values(pulse::CubicSplinePulse)
+
+Return the control values at knot points (the `u` matrix).
+"""
+get_knot_values(p::LinearSplinePulse) = p.controls.u
+get_knot_values(p::CubicSplinePulse) = p.controls.u
+
+"""
+    get_knot_derivatives(pulse::CubicSplinePulse)
+
+Return the Hermite tangents at knot points (the `du` matrix).
+Only available for CubicSplinePulse.
+"""
+get_knot_derivatives(p::CubicSplinePulse) = p.controls.du
+
+export get_knot_times, get_knot_count, get_knot_values, get_knot_derivatives
+
+# ============================================================================ #
 # Conversion methods (analytic → spline pulses)
 # ============================================================================ #
 

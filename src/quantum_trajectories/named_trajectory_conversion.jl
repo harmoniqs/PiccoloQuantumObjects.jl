@@ -33,10 +33,26 @@ Return times as a Float64 vector.
 _sample_times(traj, times::AbstractVector{<:Real}) = collect(Float64, times)
 
 """
+    _sample_times(traj, ::Nothing)
+
+For spline pulses, extract native knot times. For other pulses, error.
+"""
+function _sample_times(traj, ::Nothing)
+    pulse = traj.pulse
+    if pulse isa AbstractSplinePulse
+        return collect(Float64, get_knot_times(pulse))
+    else
+        error("Cannot infer times for $(typeof(pulse)). " *
+              "Provide N::Int for uniform sampling or times::AbstractVector.")
+    end
+end
+
+"""
     _add_global_data_to_kwargs(nt_kwargs, global_data)
 
 Helper function to process global variables and add them to NamedTrajectory kwargs.
 Converts Dict{Symbol, Vector} to flat vector and components NamedTuple.
+
 
 # Arguments
 - `nt_kwargs`: Existing NamedTuple of kwargs to merge with
@@ -113,6 +129,10 @@ end
 For CubicSplinePulse: return `u` and `du` data with system bounds and boundary conditions.
 Uses the pulse's drive_name to determine variable naming.
 
+When `times` matches the pulse's native knot times, extracts stored `u` and `du` directly.
+When resampling to different times, samples `u` via interpolation and computes `du` via
+ForwardDiff to get the true spline derivative.
+
 # Returns
 - `data`: NamedTuple with control data
 - `control_names`: Tuple of control variable names
@@ -124,18 +144,29 @@ function _get_control_data(pulse::CubicSplinePulse, times::AbstractVector, sys::
     u_name = drive_name(pulse)
     du_name = Symbol(:d, u_name)
     n = n_drives(pulse)
-    T = length(times)
     
-    # Sample u values
-    u = hcat([pulse(t) for t in times]...)
+    # Get native knot data
+    knot_times = get_knot_times(pulse)
+    knot_u = get_knot_values(pulse)
+    knot_du = get_knot_derivatives(pulse)
     
-    # Compute du via finite differences
-    Δt = diff(times)
-    du = zeros(n, T)
-    for k in 1:T-1
-        du[:, k] = (u[:, k+1] - u[:, k]) / Δt[k]
+    # Check if times match native knots (same length and values)
+    is_native = length(times) == length(knot_times) && 
+                all(isapprox.(times, knot_times; atol=1e-12))
+    
+    if is_native
+        # Use stored data directly - preserves Hermite tangents exactly
+        u = knot_u
+        du = knot_du
+    else
+        # Resampling: interpolate u and compute du via ForwardDiff
+        # Need to clamp times slightly inward at boundaries to avoid extrapolation errors
+        t_min, t_max = first(knot_times), last(knot_times)
+        eps = 1e-10 * (t_max - t_min)
+        
+        u = hcat([pulse(t) for t in times]...)
+        du = hcat([ForwardDiff.derivative(s -> pulse(s), clamp(t, t_min + eps, t_max - eps)) for t in times]...)
     end
-    du[:, T] = du[:, T-1]  # Extrapolate last point
     
     u_bounds = _get_drive_bounds(sys)
     # du bounds are typically unbounded (controlled by regularization)
@@ -180,8 +211,9 @@ end
 # ============================================================================ #
 
 """
-    NamedTrajectory(qtraj::UnitaryTrajectory, N::Int; Δt_bounds=nothing)
-    NamedTrajectory(qtraj::UnitaryTrajectory, times::AbstractVector; Δt_bounds=nothing)
+    NamedTrajectory(qtraj::UnitaryTrajectory; kwargs...)
+    NamedTrajectory(qtraj::UnitaryTrajectory, N::Int; kwargs...)
+    NamedTrajectory(qtraj::UnitaryTrajectory, times::AbstractVector; kwargs...)
 
 Convert a UnitaryTrajectory to a NamedTrajectory for optimization.
 
@@ -196,8 +228,10 @@ for time-dependent integrators used with `SplinePulseProblem`.
 
 # Arguments
 - `qtraj`: The quantum trajectory to convert
-- `N::Int`: Number of uniformly spaced time points, OR
-- `times::AbstractVector`: Specific times to sample at
+- `N_or_times`: One of:
+  - `nothing` (default): Use native knot times from spline pulse (error for non-spline pulses)
+  - `N::Int`: Number of uniformly spaced time points
+  - `times::AbstractVector`: Specific times to sample at
 
 # Keyword Arguments
 - `Δt_bounds`: Optional tuple `(lower, upper)` for timestep bounds. If provided,
@@ -210,7 +244,7 @@ A NamedTrajectory suitable for direct collocation optimization.
 """
 function NamedTrajectory(
     qtraj::UnitaryTrajectory,
-    N_or_times::Union{Int, AbstractVector{<:Real}};
+    N_or_times::Union{Nothing, Int, AbstractVector{<:Real}}=nothing;
     Δt_bounds::Union{Nothing, Tuple{Float64, Float64}}=nothing,
     global_data::Union{Nothing, Dict{Symbol, <:AbstractVector}}=nothing
 )
@@ -278,8 +312,9 @@ function NamedTrajectory(
 end
 
 """
-    NamedTrajectory(qtraj::KetTrajectory, N::Int; Δt_bounds=nothing)
-    NamedTrajectory(qtraj::KetTrajectory, times::AbstractVector; Δt_bounds=nothing)
+    NamedTrajectory(qtraj::KetTrajectory; kwargs...)
+    NamedTrajectory(qtraj::KetTrajectory, N::Int; kwargs...)
+    NamedTrajectory(qtraj::KetTrajectory, times::AbstractVector; kwargs...)
 
 Convert a KetTrajectory to a NamedTrajectory for optimization.
 
@@ -289,6 +324,12 @@ Convert a KetTrajectory to a NamedTrajectory for optimization.
 - `du`: Control derivatives (only for CubicSplinePulse)
 - `t`: Times
 
+# Arguments
+- `N_or_times`: One of:
+  - `nothing` (default): Use native knot times from spline pulse
+  - `N::Int`: Number of uniformly spaced time points
+  - `times::AbstractVector`: Specific times to sample at
+
 # Keyword Arguments
 - `Δt_bounds`: Optional tuple `(lower, upper)` for timestep bounds. If provided,
   enables free-time optimization (minimum-time problems). Default: `nothing` (no bounds).
@@ -297,7 +338,7 @@ Convert a KetTrajectory to a NamedTrajectory for optimization.
 """
 function NamedTrajectory(
     qtraj::KetTrajectory,
-    N_or_times::Union{Int, AbstractVector{<:Real}};
+    N_or_times::Union{Nothing, Int, AbstractVector{<:Real}}=nothing;
     Δt_bounds::Union{Nothing, Tuple{Float64, Float64}}=nothing,
     global_data::Union{Nothing, Dict{Symbol, <:AbstractVector}}=nothing
 )
@@ -362,8 +403,9 @@ function NamedTrajectory(
 end
 
 """
-    NamedTrajectory(qtraj::MultiKetTrajectory, N::Int; Δt_bounds=nothing)
-    NamedTrajectory(qtraj::MultiKetTrajectory, times::AbstractVector; Δt_bounds=nothing)
+    NamedTrajectory(qtraj::MultiKetTrajectory; kwargs...)
+    NamedTrajectory(qtraj::MultiKetTrajectory, N::Int; kwargs...)
+    NamedTrajectory(qtraj::MultiKetTrajectory, times::AbstractVector; kwargs...)
 
 Convert an MultiKetTrajectory to a NamedTrajectory for optimization.
 
@@ -373,6 +415,12 @@ Convert an MultiKetTrajectory to a NamedTrajectory for optimization.
 - `du`: Control derivatives (only for CubicSplinePulse)
 - `t`: Times
 
+# Arguments
+- `N_or_times`: One of:
+  - `nothing` (default): Use native knot times from spline pulse
+  - `N::Int`: Number of uniformly spaced time points
+  - `times::AbstractVector`: Specific times to sample at
+
 # Keyword Arguments
 - `Δt_bounds`: Optional tuple `(lower, upper)` for timestep bounds. If provided,
   enables free-time optimization (minimum-time problems). Default: `nothing` (no bounds).
@@ -381,7 +429,7 @@ Convert an MultiKetTrajectory to a NamedTrajectory for optimization.
 """
 function NamedTrajectory(
     qtraj::MultiKetTrajectory,
-    N_or_times::Union{Int, AbstractVector{<:Real}};
+    N_or_times::Union{Nothing, Int, AbstractVector{<:Real}}=nothing;
     Δt_bounds::Union{Nothing, Tuple{Float64, Float64}}=nothing,
     global_data::Union{Nothing, Dict{Symbol, <:AbstractVector}}=nothing
 )
@@ -453,8 +501,9 @@ function NamedTrajectory(
 end
 
 """
-    NamedTrajectory(qtraj::DensityTrajectory, N::Int; Δt_bounds=nothing)
-    NamedTrajectory(qtraj::DensityTrajectory, times::AbstractVector; Δt_bounds=nothing)
+    NamedTrajectory(qtraj::DensityTrajectory; kwargs...)
+    NamedTrajectory(qtraj::DensityTrajectory, N::Int; kwargs...)
+    NamedTrajectory(qtraj::DensityTrajectory, times::AbstractVector; kwargs...)
 
 Convert a DensityTrajectory to a NamedTrajectory for optimization.
 
@@ -464,13 +513,19 @@ Convert a DensityTrajectory to a NamedTrajectory for optimization.
 - `du`: Control derivatives (only for CubicSplinePulse)
 - `t`: Times
 
+# Arguments
+- `N_or_times`: One of:
+  - `nothing` (default): Use native knot times from spline pulse
+  - `N::Int`: Number of uniformly spaced time points
+  - `times::AbstractVector`: Specific times to sample at
+
 # Keyword Arguments
 - `Δt_bounds`: Optional tuple `(lower, upper)` for timestep bounds. If provided,
   enables free-time optimization (minimum-time problems). Default: `nothing` (no bounds).
 """
 function NamedTrajectory(
     qtraj::DensityTrajectory,
-    N_or_times::Union{Int, AbstractVector{<:Real}};
+    N_or_times::Union{Nothing, Int, AbstractVector{<:Real}}=nothing;
     Δt_bounds::Union{Nothing, Tuple{Float64, Float64}}=nothing
 )
     times = _sample_times(qtraj, N_or_times)
