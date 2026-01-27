@@ -24,7 +24,7 @@ mutable struct UnitaryTrajectory{P<:AbstractPulse, S<:ODESolution, G} <: Abstrac
     system::QuantumSystem
     pulse::P
     initial::Matrix{ComplexF64}
-    goal::G
+    goal::Matrix{ComplexF64}
     solution::S
 end
 
@@ -49,6 +49,15 @@ function UnitaryTrajectory(
     initial::AbstractMatrix{<:Number}=Matrix{ComplexF64}(I, system.levels, system.levels),
     algorithm=MagnusGL4(),
 ) where G
+    return UnitaryTrajectory(system, pulse, ComplexF64.(goal), initial, algorithm)
+end
+function UnitaryTrajectory(
+    system::QuantumSystem,
+    pulse::AbstractPulse,
+    goal::Matrix{ComplexF64};
+    initial::AbstractMatrix{<:Number}=Matrix{ComplexF64}(I, system.levels, system.levels),
+    algorithm=MagnusGL4(),
+)
     @assert n_drives(pulse) == system.n_drives "Pulse has $(n_drives(pulse)) drives, system has $(system.n_drives)"
     
     U0 = Matrix{ComplexF64}(initial)
@@ -80,6 +89,15 @@ function UnitaryTrajectory(
     drive_name::Symbol=:u,
     algorithm=MagnusGL4(),
 ) where G
+    return UnitaryTrajectory(system, ComplexF64.(goal), T, drive_name, algorithm)
+end
+function UnitaryTrajectory(
+    system::QuantumSystem,
+    goal::Matrix{ComplexF64},
+    T::Real;
+    drive_name::Symbol=:u,
+    algorithm=MagnusGL4(),
+)
     times = [0.0, T]
     controls = zeros(system.n_drives, 2)
     pulse = ZeroOrderPulse(controls, times; drive_name)
