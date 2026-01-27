@@ -20,11 +20,11 @@ Trajectory for unitary gate synthesis. The ODE solution is computed at construct
 # Conversion to NamedTrajectory
 Use `NamedTrajectory(traj, N)` or `NamedTrajectory(traj, times)` for optimization.
 """
-mutable struct UnitaryTrajectory{P<:AbstractPulse, S<:ODESolution, G} <: AbstractQuantumTrajectory{P}
+mutable struct UnitaryTrajectory{P<:AbstractPulse, S<:ODESolution} <: AbstractQuantumTrajectory{P}
     system::QuantumSystem
     pulse::P
     initial::Matrix{ComplexF64}
-    goal::Matrix{ComplexF64}
+    goal::Union{Matrix{ComplexF64}, EmbeddedOperator}
     solution::S
 end
 
@@ -45,16 +45,7 @@ Create a unitary trajectory by solving the Schrödinger equation.
 function UnitaryTrajectory(
     system::QuantumSystem,
     pulse::AbstractPulse,
-    goal::G;
-    initial::AbstractMatrix{<:Number}=Matrix{ComplexF64}(I, system.levels, system.levels),
-    algorithm=MagnusGL4(),
-) where G
-    return UnitaryTrajectory(system, pulse, ComplexF64.(goal), initial, algorithm)
-end
-function UnitaryTrajectory(
-    system::QuantumSystem,
-    pulse::AbstractPulse,
-    goal::Matrix{ComplexF64};
+    goal::Union{AbstractMatrix{ComplexF64}, EmbeddedOperator};
     initial::AbstractMatrix{<:Number}=Matrix{ComplexF64}(I, system.levels, system.levels),
     algorithm=MagnusGL4(),
 )
@@ -65,8 +56,19 @@ function UnitaryTrajectory(
     prob = UnitaryOperatorODEProblem(system, pulse, times; U0=U0)
     sol = solve(prob, algorithm; saveat=times)
     
-    return UnitaryTrajectory{typeof(pulse), typeof(sol), G}(system, pulse, U0, goal, sol)
+    return UnitaryTrajectory{typeof(pulse), typeof(sol)}(system, pulse, U0, goal, sol)
 end
+function UnitaryTrajectory(
+    system::QuantumSystem,
+    pulse::AbstractPulse,
+    goal::Union{AbstractMatrix{<:Number}, EmbeddedOperator};
+    initial::AbstractMatrix{<:Number}=Matrix{ComplexF64}(I, system.levels, system.levels),
+    algorithm=MagnusGL4(),
+)
+    goal_converted = goal isa AbstractMatrix ? ComplexF64.(goal) : goal
+    return UnitaryTrajectory(system, pulse, goal_converted; initial, algorithm)
+end
+
 
 """
     UnitaryTrajectory(system, goal, T::Real; drive_name=:u, algorithm=MagnusGL4())
@@ -84,16 +86,7 @@ Convenience constructor that creates a zero pulse of duration T.
 """
 function UnitaryTrajectory(
     system::QuantumSystem,
-    goal::G,
-    T::Real;
-    drive_name::Symbol=:u,
-    algorithm=MagnusGL4(),
-) where G
-    return UnitaryTrajectory(system, ComplexF64.(goal), T, drive_name, algorithm)
-end
-function UnitaryTrajectory(
-    system::QuantumSystem,
-    goal::Matrix{ComplexF64},
+    goal::Union{AbstractMatrix{ComplexF64}, EmbeddedOperator},
     T::Real;
     drive_name::Symbol=:u,
     algorithm=MagnusGL4(),
@@ -102,6 +95,16 @@ function UnitaryTrajectory(
     controls = zeros(system.n_drives, 2)
     pulse = ZeroOrderPulse(controls, times; drive_name)
     return UnitaryTrajectory(system, pulse, goal; algorithm)
+end
+function UnitaryTrajectory(
+    system::QuantumSystem,
+    goal::Union{AbstractMatrix{<:Number}, EmbeddedOperator},
+    T::Real;
+    drive_name::Symbol=:u,
+    algorithm=MagnusGL4(),
+)
+    goal_converted = goal isa AbstractMatrix ? ComplexF64.(goal) : goal
+    return UnitaryTrajectory(system, goal_converted, T, drive_name, algorithm)
 end
 
 # Callable: sample solution at any time
